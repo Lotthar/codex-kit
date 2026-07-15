@@ -9,7 +9,7 @@
   "files": ["bin", "src", "catalog", "policies", "profiles", "schemas", "workflow-skills", "promptx/skills", "promptx/templates", "promptx/promptx.mjs", "continuous-clean-code-refactor", "setup-graphify-codex.mjs", "README.md", "SECURITY.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
     "test": "node --test",
-    "check": "node --check bin/codex-kit.mjs && node --check src/*.mjs",
+    "check": "node scripts/check-syntax.mjs",
     "lint": "npm run check",
     "coverage": "node --experimental-test-coverage --test"
   },
