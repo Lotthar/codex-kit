@@ -99,7 +99,7 @@ test('upgrades an unchanged Kit-owned skill while preserving ownership', async (
   await writeFile(stateFile, `${JSON.stringify(state, null, 2)}\n`);
   const refreshed = await applyProject(await projectPlan({ root }));
   assert.equal(refreshed.status, 'ok');
-  assert.match(await readFile(join(destination, 'SKILL.md'), 'utf8'), /^---\nname: plan-with-subagents/m);
+  assert.match(await readFile(join(destination, 'SKILL.md'), 'utf8'), /^---\r?\nname: plan-with-subagents/m);
 });
 
 test('project commands require Git', async () => {
