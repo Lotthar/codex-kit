@@ -1,28 +1,32 @@
-import { backup, atomicWrite, exists } from './util.mjs';
+import { detectEol, withEol } from './platform.mjs';
 
-export const START = '<!-- codex-kit:managed:start -->';
-export const END = '<!-- codex-kit:managed:end -->';
+export const markers = (scope = 'project') => ({ start: `<!-- codex-kit:${scope}:start -->`, end: `<!-- codex-kit:${scope}:end -->` });
+export const START = markers().start;
+export const END = markers().end;
 
-export function renderManagedBlock({ profiles, components }) {
+export function renderManagedBlock({ profiles = [], components = [], instructions = [], scope = 'project' }) {
+  const pair = markers(scope);
   const profileText = profiles.map((profile) => `- Active profile: \`${profile}\`.`).join('\n');
-  const componentText = components.map((component) => `- Enabled component: \`${component}\`.`).join('\n');
-  return `${START}\n## Codex Kit\n\nThis block is maintained by Codex Kit. Edit project-specific instructions outside it.\n\n${profileText}\n${componentText}\n\n- Prefer the smallest verified change and follow local repository instructions.\n- Use Ruflo only for persistent coordination across three or more dependent workstreams.\n- Graphify installation, graph builds, and hooks require explicit project consent.\n${END}`;
+  const componentText = components.map((component) => `- Selected component: \`${component}\`.`).join('\n');
+  const instructionText = instructions.map((item) => `### ${item.id}\n\n${item.text}`).join('\n\n');
+  return `${pair.start}\n## Codex Kit\n\nThis block is maintained by Codex Kit. Edit project-specific instructions outside it.\n\n${profileText}\n${componentText}\n\n- Prefer the smallest verified change and follow local repository instructions.\n- Use Ruflo only for persistent coordination across three or more dependent workstreams.\n- Graphify installation, graph builds, and hooks require explicit project consent.\n${instructionText ? `\n\n${instructionText}\n` : ''}${pair.end}`;
 }
 
-export function mergeManagedBlock(existing, block) {
-  const start = existing.indexOf(START);
-  const end = existing.indexOf(END);
-  if (start === -1 && end === -1) return `${existing.trimEnd()}${existing.trim() ? '\n\n' : ''}${block}\n`;
-  if (start === -1 || end === -1 || end < start) throw new Error('Conflicting Codex Kit markers in AGENTS.md; repair them manually.');
-  if (existing.indexOf(START, start + START.length) !== -1 || existing.indexOf(END, end + END.length) !== -1) throw new Error('Multiple Codex Kit marker blocks found; refusing to choose one.');
-  return `${existing.slice(0, start)}${block}${existing.slice(end + END.length)}`;
-}
-
-export async function applyManagedBlock(path, root, block) {
-  const original = exists(path) ? await (await import('node:fs/promises')).readFile(path, 'utf8') : '';
-  const updated = mergeManagedBlock(original, block);
-  if (updated === original) return { changed: false };
-  const receipt = await backup(path, root);
-  await atomicWrite(path, updated);
-  return { changed: true, receipt };
+export function mergeManagedBlock(existing, block, scope = 'project') {
+  const pair = markers(scope);
+  const legacy = { start: '<!-- codex-kit:managed:start -->', end: '<!-- codex-kit:managed:end -->' };
+  let active = pair;
+  let start = existing.indexOf(pair.start);
+  let end = existing.indexOf(pair.end);
+  if (scope === 'project' && start === -1 && end === -1 && (existing.includes(legacy.start) || existing.includes(legacy.end))) {
+    active = legacy;
+    start = existing.indexOf(legacy.start);
+    end = existing.indexOf(legacy.end);
+  }
+  const eol = detectEol(existing);
+  const normalized = withEol(block, eol);
+  if (start === -1 && end === -1) return `${existing.trimEnd()}${existing.trim() ? `${eol}${eol}` : ''}${normalized}${eol}`;
+  if (start === -1 || end === -1 || end < start) throw new Error(`Conflicting Codex Kit ${scope} markers; repair them manually.`);
+  if (existing.indexOf(active.start, start + active.start.length) !== -1 || existing.indexOf(active.end, end + active.end.length) !== -1) throw new Error(`Multiple Codex Kit ${scope} marker blocks found; refusing to choose one.`);
+  return `${existing.slice(0, start)}${normalized}${existing.slice(end + active.end.length)}`;
 }

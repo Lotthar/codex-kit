@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "minimumNodeVersion": 20,
-  "platforms": ["linux"],
+  "platforms": ["linux", "win32"],
   "presets": {
     "minimal": ["base-policy"],
     "developer": ["base-policy", "ponytail", "ruflo", "graphify", "promptx", "clean-code"],
@@ -14,6 +14,16 @@
     "graphify": { "kind": "project-tool", "scope": ["project"], "version": "0.9.11", "legacyPath": "setup-graphify-codex.mjs" },
     "promptx": { "kind": "project-tool", "scope": ["project"], "legacyPath": "promptx/setup-codex-prompt-enhancer.mjs" },
     "clean-code": { "kind": "project-tool", "scope": ["project"], "legacyPath": "continuous-clean-code-refactor/SKILL.md" }
+  },
+  "profiles": {
+    "generic": { "source": "profiles/generic/AGENTS.md" },
+    "node": { "source": "profiles/node/AGENTS.md" },
+    "nuxt": { "source": "profiles/nuxt/AGENTS.md", "requires": ["node"] },
+    "angular": { "source": "profiles/angular/AGENTS.md", "requires": ["node"] },
+    "java": { "source": "profiles/java/AGENTS.md" },
+    "spring": { "source": "profiles/spring/AGENTS.md", "requires": ["java"] },
+    "quarkus": { "source": "profiles/quarkus/AGENTS.md", "requires": ["java"] },
+    "flutter": { "source": "profiles/flutter/AGENTS.md" }
   },
   "portableSources": ["AGENTS.md", "skills"]
 }

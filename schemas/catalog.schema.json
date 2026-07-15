@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schemaVersion", "platforms", "presets", "components", "profiles"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "platforms": { "type": "array", "items": { "enum": ["linux", "win32"] } },
+    "presets": { "type": "object" },
+    "components": { "type": "object" },
+    "profiles": { "type": "object" }
+  }
+}

@@ -1,54 +1,66 @@
 # Codex Kit
 
-Codex Kit makes a repeatable, reviewable Codex baseline for Linux developer machines and individual projects. It is intentionally Node-standard-library-only, never copies a whole `~/.codex` directory, and defaults to previewing a plan before changes.
+Codex Kit creates reviewable, repeatable Codex setup plans for personal Codex homes and Git projects. It previews changes by default, records file transactions, and supports Linux plus native Windows 11.
 
-## Quick start
+## Platform support
 
-```bash
-npm test
-node bin/codex-kit.mjs setup --preset developer --dry-run
-node bin/codex-kit.mjs project init --dry-run
-node bin/codex-kit.mjs project init --yes
+| Platform | Support |
+| --- | --- |
+| Linux | Tier one |
+| Windows 11, PowerShell and Command Prompt | Tier one |
+| WSL2 | Linux behavior |
+| Windows 10 and macOS | Best effort |
+
+Node 20+, Git, and Codex are required. GitHub CLI is required only to download private releases; Python is optional for Graphify.
+
+## Install a private release
+
+Download the release tarball with authenticated GitHub CLI, then install it with npm. The same commands work in Bash and PowerShell:
+
+```text
+gh release download v0.2.0-beta.1 -R Lotthar/codex-kit --pattern "codex-kit-*.tgz"
+npm install -g codex-kit-*.tgz
+codex-kit wizard
 ```
 
-Install it globally from a checked-out copy with `npm link`, or run `node /path/to/codex-kit/bin/codex-kit.mjs`.
+For development from a clone:
+
+```text
+npm install
+npm link
+codex-kit doctor
+```
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `setup` / `apply` | Preview or apply a portable global Codex preset. |
-| `project init` / `project refresh` | Detect a project and manage a bounded block in its `AGENTS.md`. |
-| `add` / `remove` | Change enabled project components. |
-| `skill import NAME --source PATH` | Preview or import one portable, non-sensitive skill into `.agents/skills` with a provenance receipt. |
-| `diff` | Show the desired managed project block without writing it. |
-| `doctor` | Check Node/Codex availability and optionally return Codex diagnostics. |
-| `update` | Report pinned-component update candidates; no network access by default. |
-| `rollback` | Restore the latest Codex Kit backup. |
-| `export` | Export a safe inventory of portable local artifacts; secrets and raw config are excluded. |
+| `wizard` | Step-by-step preflight, selection, preview, and confirmation. |
+| `setup` | Plan or apply a global preset. Network components require `--allow-network`. |
+| `project init`, `refresh`, `plan`, `apply`, `status` | Manage a Git project’s desired Codex setup. |
+| `component add/remove/list` | Manage selected project components. `add/remove` remain aliases. |
+| `skill import` | Copy one portable, validated local skill with provenance. |
+| `diff`, `history`, `rollback` | Review and recover managed project changes. |
+| `doctor`, `update --check`, `export` | Inspect prerequisites, pinned update availability, and portable artifacts. |
 
-All mutating commands require `--yes`; otherwise they preview. `--dry-run` always prevents writes. `--json` returns machine-readable output.
+Mutations require `--yes`; `--dry-run` always wins; `--json` never prompts. Noninteractive environments should use explicit commands and flags.
 
-To reuse another personal skill in a project, commit its portable source in this repository or import it explicitly:
+## Profiles
 
-```bash
-codex-kit skill import my-skill --source ~/.codex/skills --yes
-```
+Profiles are detected from files and manifests without running project code. They compose from runtime to framework:
 
-The importer requires a `SKILL.md`, refuses suspicious credential files, never overwrites a project skill, and records its source in `.codex-kit/imports.json`.
+- `node + nuxt` for Nuxt
+- `node + angular` for Angular CLI or Nx Angular projects
+- `java + spring` for Spring Boot projects
+- `java + quarkus` for Quarkus projects
+- `flutter` or `generic` where appropriate
 
-## Safe defaults
+Angular detection uses `angular.json` or `@angular/core`. Java projects use Maven/Gradle markers; Spring and Quarkus require their specific dependencies/plugins. Project config can include or exclude profiles explicitly.
 
-- Presets are pinned in `catalog/codex-kit.lock.json`.
-- Global setup uses the Codex CLI for plugins/MCPs and only edits allowlisted TOML values.
-- Project setup detects `Node`, `Nuxt`, `Flutter`, `Quarkus/Java`, or falls back to `generic`.
-- Graphify is recommended for a monorepo, three top-level packages/services, or at least 300 tracked source files. Installing, building a graph, and hooks are separate explicit choices.
-- Optional enrichment invokes `codex exec` in a temporary directory with an ephemeral, read-only, user-config-free session. Its JSON output is proposed, never applied automatically.
+## Project state and recovery
 
-## Legacy assets
+`.codex-kit/config.json` is the commit-friendly desired configuration. Runtime state, locks, backups, and transaction receipts remain ignored. `diff` previews the resulting managed block, `history` lists transactions, and `rollback --transaction ID --yes` restores tracked file changes. Plugin and MCP changes are best-effort reversible and are recorded clearly.
 
-Existing `setup-graphify-codex.mjs`, `promptx/`, and `continuous-clean-code-refactor/` are retained. Codex Kit records them as optional components; it does not run their older setup scripts implicitly because those scripts may install packages or mutate broader project state.
+Graphify installation, graph builds, hooks, and Codex enrichment always require explicit consent. PromptX and clean-code assets are never run implicitly.
 
-## Repository and security policy
-
-Commit portable policies, catalog definitions, and custom skills that contain no private code or credentials. Do not commit `auth.json`, OAuth data, history/session/cache files, raw Codex configuration, private source, or generated trust data. See [SECURITY.md](SECURITY.md).
+See [SECURITY.md](SECURITY.md), [CHANGELOG.md](CHANGELOG.md), and [CONTRIBUTING.md](CONTRIBUTING.md).

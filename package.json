@@ -1,15 +1,19 @@
 {
   "name": "codex-kit",
-  "version": "0.1.0",
+  "version": "0.2.0-beta.1",
   "private": true,
   "description": "Reproducible, safe Codex setup for global and project workflows.",
   "type": "module",
   "bin": { "codex-kit": "./bin/codex-kit.mjs" },
   "engines": { "node": ">=20" },
+  "files": ["bin", "src", "catalog", "policies", "profiles", "schemas", "promptx/skills", "promptx/templates", "continuous-clean-code-refactor", "setup-graphify-codex.mjs", "README.md", "SECURITY.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
     "test": "node --test",
     "check": "node --check bin/codex-kit.mjs && node --check src/*.mjs",
-    "lint": "npm run check"
+    "lint": "npm run check",
+    "coverage": "node --experimental-test-coverage --test"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+ssh://git@github.com/Lotthar/codex-kit.git" },
+  "dependencies": { "cross-spawn": "7.0.6" }
 }

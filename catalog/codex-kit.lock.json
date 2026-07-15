@@ -1,9 +1,10 @@
 {
-  "lockVersion": 1,
+  "lockVersion": 2,
   "generatedFor": "codex-kit",
   "components": {
     "ponytail": { "plugin": "ponytail@ponytail", "version": "4.8.4", "gitCommit": "14a0d79548d4de8fc2de95c1b94bb0de63a739d3" },
     "ruflo": { "package": "ruflo", "version": "3.28.0" },
-    "graphify": { "package": "graphify", "version": "0.9.11" }
+    "graphify": { "package": "graphify", "version": "0.9.11" },
+    "cross-spawn": { "package": "cross-spawn", "version": "7.0.6" }
   }
 }

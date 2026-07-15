@@ -1,4 +1,5 @@
 node_modules/
-.codex-kit/
+.codex-kit/*
+!.codex-kit/config.json
 *.log
 .DS_Store

@@ -12,3 +12,9 @@ test('updates only allowlisted top-level TOML sections', () => {
 test('rejects non-allowlisted TOML sections', () => {
   assert.throws(() => setTomlValues('', 'mcp_servers', { x: 'true' }), /allowlisted/);
 });
+
+test('preserves CRLF and rejects duplicate tables', () => {
+  const output = setTomlValues('[features]\r\nold = false\r\n', 'features', { old: 'true' });
+  assert.match(output, /\r\n/);
+  assert.throws(() => setTomlValues('[features]\na = true\n[features]\nb = false\n', 'features', { a: 'false' }), /Duplicate/);
+});
