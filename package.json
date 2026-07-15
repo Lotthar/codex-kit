@@ -1,0 +1,15 @@
+{
+  "name": "codex-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reproducible, safe Codex setup for global and project workflows.",
+  "type": "module",
+  "bin": { "codex-kit": "./bin/codex-kit.mjs" },
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check bin/codex-kit.mjs && node --check src/*.mjs",
+    "lint": "npm run check"
+  },
+  "license": "MIT"
+}

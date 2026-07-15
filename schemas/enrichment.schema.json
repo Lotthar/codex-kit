@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "recommendations"],
+  "properties": {
+    "summary": { "type": "string", "maxLength": 1000 },
+    "recommendations": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "reason"],
+        "properties": {
+          "id": { "type": "string", "enum": ["base-policy", "ponytail", "ruflo", "graphify", "promptx", "clean-code"] },
+          "reason": { "type": "string", "maxLength": 300 }
+        }
+      }
+    }
+  }
+}
