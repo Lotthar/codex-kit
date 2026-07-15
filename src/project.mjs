@@ -1,11 +1,11 @@
 import { join } from 'node:path';
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { action, atomicWrite, exists, readJson, run } from './util.mjs';
 import { renderManagedBlock, mergeManagedBlock } from './managed.mjs';
 import { detectProfiles, profileInstructions, projectName } from './profiles.mjs';
 import { kitRoot, presetComponents, validateCatalog } from './manifest.mjs';
-import { beginTransaction, finishTransaction, listTransactions, pathHash, rollbackTransaction, withLock, writeTracked } from './transaction.mjs';
+import { beginTransaction, copyTracked, finishTransaction, listTransactions, pathHash, removeTracked, replaceTracked, rollbackTransaction, withLock, writeTracked } from './transaction.mjs';
 
 const configPath = (root) => join(root, '.codex-kit', 'config.json');
 const statePath = (root) => join(root, '.codex-kit', 'state.json');
@@ -40,7 +40,16 @@ async function resolveProfiles(detection, config) {
 async function resolveComponents(config) {
   const preset = await presetComponents(config.preset);
   const excluded = new Set(config.components?.exclude ?? []);
-  return [...new Set([...preset, ...(config.components?.include ?? [])])].filter((id) => id !== 'ruflo' && !excluded.has(id));
+  const { manifest } = await validateCatalog();
+  return [...new Set([...preset, ...(config.components?.include ?? [])])].filter((id) => manifest.components[id]?.scope.includes('project') && !excluded.has(id));
+}
+
+async function projectAssets(components, config) {
+  const { manifest } = await validateCatalog();
+  return components.flatMap((component) => {
+    if (component === 'graphify' && !config.tools?.graphify?.install) return [];
+    return (manifest.components[component]?.assets ?? []).map((asset) => ({ component, ...asset }));
+  });
 }
 
 export async function projectPlan({ root, preset = 'developer', requestedConfig }) {
@@ -49,17 +58,18 @@ export async function projectPlan({ root, preset = 'developer', requestedConfig 
   const detection = await detectProfiles(projectRoot);
   const [profiles, components] = [await resolveProfiles(detection, config), await resolveComponents(config)];
   const instructions = await profileInstructions(profiles);
+  const assets = await projectAssets(components, config);
   const actions = [
     action('planned', 'detect project profiles', profiles.join(', ')),
     action('planned', `manage ${join(projectRoot, 'AGENTS.md')}`, 'bounded Codex Kit marker block', { scope: 'project', reversibility: 'full' }),
     action('planned', `write ${configPath(projectRoot)}`, 'committed desired setup', { scope: 'project', reversibility: 'full' }),
     action('planned', `write ${statePath(projectRoot)}`, 'runtime receipt', { scope: 'project', reversibility: 'full' })
   ];
-  actions.push(action(detection.graphifyRecommended ? 'planned' : 'skipped', 'recommend Graphify', detection.graphifyRecommended ? 'threshold met; install/build/hooks remain opt-in' : 'below recommendation threshold'));
+  actions.push(action('recommended', 'use Graphify', detection.graphifyRecommended ? 'strongly recommended for this repository; adapter/build/hooks remain opt-in' : 'recommended for structural context; adapter/build/hooks remain opt-in'));
   if (detection.frameworkConflict) actions.push(action('conflict', 'Spring and Quarkus detected', 'confirm the intended framework before applying.'));
-  for (const component of components.filter((id) => ['promptx', 'clean-code'].includes(id))) actions.push(action('planned', `provision ${component}`, 'portable project skill', { reversibility: 'full' }));
+  for (const component of [...new Set(assets.map((asset) => asset.component).filter((id) => id !== 'graphify'))]) actions.push(action('planned', `provision ${component}`, 'portable project assets', { reversibility: 'full' }));
   actions.push(action(config.tools?.graphify?.install ? 'planned' : 'skipped', 'provision Graphify setup', config.tools?.graphify?.install ? 'copies the explicit setup adapter; build and hooks remain separate' : 'enable tools.graphify.install in project config to provision'));
-  return { status: detection.frameworkConflict ? 'conflict' : 'ok', project: await projectName(projectRoot), root: projectRoot, config, profiles, components, instructions, graphifyRecommended: detection.graphifyRecommended, actions };
+  return { status: detection.frameworkConflict ? 'conflict' : 'ok', project: await projectName(projectRoot), root: projectRoot, config, profiles, components, instructions, assets, graphifyRecommended: detection.graphifyRecommended, actions };
 }
 
 export async function applyProject(plan) {
@@ -67,34 +77,54 @@ export async function applyProject(plan) {
   return withLock(plan.root, async () => {
     const transaction = await beginTransaction(plan.root, 'project');
     try {
+      const previousState = await readJson(statePath(plan.root), { assets: [] });
+      const previousAssets = new Map((previousState.assets ?? []).map((asset) => [asset.target, asset]));
       const agentsPath = join(plan.root, 'AGENTS.md');
       const original = exists(agentsPath) ? await readFile(agentsPath, 'utf8') : '';
       const block = renderManagedBlock({ profiles: plan.profiles, components: plan.components, instructions: plan.instructions });
       await writeTracked(transaction, agentsPath, mergeManagedBlock(original, block));
       await writeTracked(transaction, configPath(plan.root), `${JSON.stringify(plan.config, null, 2)}\n`);
-      await writeTracked(transaction, statePath(plan.root), `${JSON.stringify({ schemaVersion: 2, profiles: plan.profiles, components: plan.components, updatedAt: new Date().toISOString() }, null, 2)}\n`);
-      const portableTools = [
-        ['promptx', join(kitRoot, 'promptx', 'skills', 'prompt-enhancer'), 'prompt-enhancer'],
-        ['clean-code', join(kitRoot, 'continuous-clean-code-refactor'), 'continuous-clean-code-refactor']
-      ];
-      for (const [component, source, name] of portableTools) if (plan.components.includes(component)) {
-        const destination = join(plan.root, '.agents', 'skills', name);
-        if (!exists(destination)) {
-          await mkdir(join(plan.root, '.agents', 'skills'), { recursive: true });
-          await cp(source, destination, { recursive: true, dereference: false });
-          transaction.files.push({ path: `.agents/skills/${name}`, beforeExists: false, backup: null, beforeHash: null, afterHash: await pathHash(destination) });
+      const installedAssets = [];
+      const assetActions = [];
+      for (const asset of plan.assets ?? await projectAssets(plan.components, plan.config)) {
+        const source = join(kitRoot, asset.source);
+        const destination = join(plan.root, asset.target);
+        const sourceHash = await pathHash(source);
+        if (exists(destination)) {
+          const destinationHash = await pathHash(destination);
+          const previous = previousAssets.get(asset.target);
+          if (previous?.hash === destinationHash) {
+            if (destinationHash !== sourceHash) {
+              await replaceTracked(transaction, source, destination);
+              installedAssets.push({ component: asset.component, target: asset.target, hash: sourceHash });
+              assetActions.push(action('changed', `update ${asset.target}`, asset.component));
+            } else {
+              installedAssets.push({ component: asset.component, target: asset.target, hash: destinationHash });
+              assetActions.push(action('unchanged', `provision ${asset.target}`, 'already matches Codex Kit'));
+            }
+          } else {
+            assetActions.push(action(destinationHash === sourceHash ? 'unchanged' : 'conflict', `provision ${asset.target}`, destinationHash === sourceHash ? 'matching existing content preserved as user-owned' : 'existing user content preserved'));
+          }
+          continue;
         }
+        await copyTracked(transaction, source, destination);
+        installedAssets.push({ component: asset.component, target: asset.target, hash: sourceHash });
+        assetActions.push(action('changed', `provision ${asset.target}`, asset.component));
       }
-      if (plan.config.tools?.graphify?.install) {
-        const destination = join(plan.root, '.codex-kit', 'tools', 'setup-graphify-codex.mjs');
-        if (!exists(destination)) {
-          await mkdir(join(plan.root, '.codex-kit', 'tools'), { recursive: true });
-          await cp(join(kitRoot, 'setup-graphify-codex.mjs'), destination);
-          transaction.files.push({ path: '.codex-kit/tools/setup-graphify-codex.mjs', beforeExists: false, backup: null, beforeHash: null, afterHash: await pathHash(destination) });
+      const desiredTargets = new Set((plan.assets ?? []).map((asset) => asset.target));
+      for (const previous of previousAssets.values()) if (!desiredTargets.has(previous.target)) {
+        const destination = join(plan.root, previous.target);
+        if (!exists(destination)) continue;
+        if (await pathHash(destination) !== previous.hash) {
+          assetActions.push(action('conflict', `remove ${previous.target}`, 'modified content preserved'));
+          continue;
         }
+        await removeTracked(transaction, destination);
+        assetActions.push(action('changed', `remove ${previous.target}`, 'component no longer selected'));
       }
+      await writeTracked(transaction, statePath(plan.root), `${JSON.stringify({ schemaVersion: 2, profiles: plan.profiles, components: plan.components, assets: installedAssets, updatedAt: new Date().toISOString() }, null, 2)}\n`);
       const receipt = await finishTransaction(transaction);
-      return { ...plan, status: 'ok', transactionId: receipt.id, actions: plan.actions.map((item) => item.state === 'planned' ? { ...item, state: 'changed' } : item) };
+      return { ...plan, status: assetActions.some((item) => item.state === 'conflict') ? 'partial' : 'ok', transactionId: receipt.id, actions: [...plan.actions.map((item) => item.state === 'planned' ? { ...item, state: 'changed' } : item), ...assetActions] };
     } catch (error) {
       const receipt = await finishTransaction(transaction, 'failed');
       await rollbackTransaction(plan.root, receipt.id);
@@ -112,7 +142,13 @@ export async function modifyProject({ root, component, remove = false, execute =
   const config = await desiredConfig(projectRoot, 'developer');
   const key = remove ? 'exclude' : 'include';
   config.components[key] = [...new Set([...(config.components[key] ?? []), component])];
-  if (remove) config.components.include = (config.components.include ?? []).filter((id) => id !== component);
+  const opposite = remove ? 'include' : 'exclude';
+  config.components[opposite] = (config.components[opposite] ?? []).filter((id) => id !== component);
+  if (remove && component === 'graphify') {
+    config.tools ??= {};
+    config.tools.graphify ??= {};
+    config.tools.graphify.install = false;
+  }
   const plan = await projectPlan({ root: projectRoot, preset: config.preset, requestedConfig: config });
   return execute ? applyProject(plan) : plan;
 }

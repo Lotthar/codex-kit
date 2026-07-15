@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
-import { readJson } from './util.mjs';
+import { dirname, isAbsolute, resolve, win32 } from 'node:path';
+import { exists, readJson } from './util.mjs';
+import { isWithin } from './platform.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const kitRoot = root;
@@ -19,6 +20,11 @@ export async function validateCatalog() {
     if (!['policy', 'plugin', 'mcp', 'project-tool'].includes(component.kind)) throw new Error(`Component ${id} has an unsupported kind.`);
     if (!Array.isArray(component.scope)) throw new Error(`Component ${id} must declare scope.`);
     if (component.version && lock.components[id]?.version !== component.version) throw new Error(`Lock drift for ${id}.`);
+    for (const asset of component.assets ?? []) {
+      const source = resolve(root, asset.source ?? '');
+      if (!asset.source || win32.isAbsolute(asset.source) || source === root || !isWithin(root, source) || !exists(source)) throw new Error(`Component ${id} has an invalid asset source.`);
+      if (!asset.target || isAbsolute(asset.target) || win32.isAbsolute(asset.target) || asset.target.split(/[\\/]/).includes('..')) throw new Error(`Component ${id} asset target must stay inside the project.`);
+    }
   }
   for (const [id, profile] of Object.entries(manifest.profiles)) {
     if (!profile.source || !profile.source.startsWith('profiles/')) throw new Error(`Profile ${id} has an invalid source.`);

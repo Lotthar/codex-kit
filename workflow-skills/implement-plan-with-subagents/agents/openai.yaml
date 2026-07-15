@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Plan With Subagents"
+  short_description: "Implement an approved plan with delegated checks"
+  default_prompt: "Use $implement-plan-with-subagents to execute this approved plan safely."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan With Subagents"
+  short_description: "Plan complex changes with focused subagents"
+  default_prompt: "Use $plan-with-subagents to produce an evidence-based implementation plan."

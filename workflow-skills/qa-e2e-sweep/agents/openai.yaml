@@ -1,0 +1,4 @@
+interface:
+  display_name: "QA E2E Sweep"
+  short_description: "Run evidence-based local end-to-end QA"
+  default_prompt: "Use $qa-e2e-sweep to test this application locally and report findings."

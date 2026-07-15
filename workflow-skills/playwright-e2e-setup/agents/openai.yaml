@@ -1,0 +1,4 @@
+interface:
+  display_name: "Playwright E2E Setup"
+  short_description: "Build a safe project-scoped Playwright kit"
+  default_prompt: "Use $playwright-e2e-setup to add or improve this project's Playwright E2E setup."

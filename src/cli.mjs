@@ -34,34 +34,49 @@ const optionSpec = {
 const execute = (values) => Boolean(values.yes) && !values['dry-run'];
 const resultCode = (result) => ['conflict', 'failed'].includes(result.status) ? 1 : 0;
 
+export function foundationRecommendations(graphifyRecommended = false) {
+  return [
+    { id: 'ponytail', scope: 'global', detail: 'everyday simplicity and the smallest correct implementation' },
+    { id: 'ruflo', scope: 'global', detail: 'durable coordination for three or more dependent workstreams' },
+    { id: 'graphify', scope: 'project', detail: graphifyRecommended ? 'structural repository context; strongly recommended for this project' : 'structural repository context as the codebase grows' }
+  ];
+}
+
 function parse(argv) { return parseArgs({ args: argv, options: optionSpec, allowPositionals: true, strict: true }); }
 
 async function runWizard(values) {
   if (!isatty(stdin.fd) || values.json) throw new Error('Wizard requires an interactive terminal. Use explicit commands with --yes in automation.');
   const rl = createInterface({ input: stdin, output: stdout });
   try {
-    const scope = (await rl.question('Scope (project/global/both) [project]: ')).trim() || 'project';
+    stdout.write('Recommended foundation: Ponytail for everyday simplicity; Ruflo for durable complex coordination; Graphify for repository structure.\n');
+    stdout.write('Ponytail and Ruflo are global integrations. Graphify and bundled skills are project-local.\n\n');
+    const scope = (await rl.question('Scope (project/global/both) [both]: ')).trim() || 'both';
     const preset = (await rl.question('Preset (minimal/developer/personal) [developer]: ')).trim() || 'developer';
-    const allowNetwork = (await rl.question('Allow network component installs? (y/N): ')).trim().toLowerCase() === 'y';
     if (!['project', 'global', 'both'].includes(scope)) throw new Error('Scope must be project, global, or both.');
+    const allowNetwork = scope === 'project' ? false : (await rl.question('Install the recommended global Ponytail plugin and Ruflo MCP (network access)? (y/N): ')).trim().toLowerCase() === 'y';
     const plans = [];
+    const recommendations = foundationRecommendations();
     if (scope !== 'global') {
       let plan = await projectPlan({ root: values.root || process.cwd(), preset });
-      const tools = (await rl.question('Project tools (graphify,promptx,clean-code) [all for preset]: ')).trim();
+      recommendations.splice(0, recommendations.length, ...foundationRecommendations(plan.graphifyRecommended));
+      stdout.write(`Detected profiles: ${plan.profiles.join(', ')}.\n`);
+      const tools = (await rl.question('Project foundation (graphify,workflow-skills,promptx,clean-code) [all for preset]: ')).trim();
       if (tools) {
-        const include = tools.split(',').map((item) => item.trim()).filter(Boolean);
+        const include = tools.toLowerCase() === 'none' ? [] : tools.split(',').map((item) => item.trim()).filter(Boolean);
         plan.config.preset = 'minimal';
         plan.config.components.include = include;
         plan = await projectPlan({ root: plan.root, requestedConfig: plan.config });
       }
-      if ((await rl.question('Provision the explicit Graphify setup adapter? (y/N): ')).trim().toLowerCase() === 'y') {
+      if (plan.components.includes('graphify') && (await rl.question('Provision the recommended Graphify setup adapter? (Y/n): ')).trim().toLowerCase() !== 'n') {
         plan.config.tools.graphify.install = true;
         plan = await projectPlan({ root: plan.root, requestedConfig: plan.config });
       }
       plans.push(plan);
     }
     if (scope !== 'project') plans.push(await globalPlan({ preset, home: values.home || codexHome(), allowNetwork }));
-    print({ status: 'ok', actions: plans.flatMap((plan) => plan.actions) }, false);
+    const recommendationActions = recommendations.map((item) => action('recommended', `${item.id} (${item.scope})`, item.detail));
+    if (scope === 'project') recommendationActions.push(action('recommended', 'configure global foundation later', 'run codex-kit setup --preset developer --allow-network --yes when ready'));
+    print({ status: 'ok', actions: [...recommendationActions, ...plans.flatMap((plan) => plan.actions)] }, false);
     if ((await rl.question('Apply this plan? (y/N): ')).trim().toLowerCase() !== 'y') return { status: 'ok', actions: [action('skipped', 'apply wizard plan', 'not confirmed')] };
     const results = [];
     for (const plan of plans) results.push(plan.root ? await applyProject(plan) : await applyGlobal(plan, allowNetwork));

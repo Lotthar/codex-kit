@@ -1,12 +1,12 @@
 {
   "name": "codex-kit",
-  "version": "0.2.0-beta.1",
+  "version": "0.2.0-beta.2",
   "private": true,
   "description": "Reproducible, safe Codex setup for global and project workflows.",
   "type": "module",
   "bin": { "codex-kit": "./bin/codex-kit.mjs" },
   "engines": { "node": ">=20" },
-  "files": ["bin", "src", "catalog", "policies", "profiles", "schemas", "promptx/skills", "promptx/templates", "continuous-clean-code-refactor", "setup-graphify-codex.mjs", "README.md", "SECURITY.md", "LICENSE", "CHANGELOG.md"],
+  "files": ["bin", "src", "catalog", "policies", "profiles", "schemas", "workflow-skills", "promptx/skills", "promptx/templates", "promptx/promptx.mjs", "continuous-clean-code-refactor", "setup-graphify-codex.mjs", "README.md", "SECURITY.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
     "test": "node --test",
     "check": "node --check bin/codex-kit.mjs && node --check src/*.mjs",

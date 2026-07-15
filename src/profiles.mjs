@@ -56,7 +56,9 @@ export async function profileInstructions(profiles) {
   for (const id of profiles) {
     const profile = manifest.profiles[id];
     if (!profile) continue;
-    output.push({ id, text: (await readFile(join(kitRoot, profile.source), 'utf8')).trim() });
+    const source = (await readFile(join(kitRoot, profile.source), 'utf8')).trim();
+    const nested = source.replace(/^# [^\r\n]+\r?\n+/, '').split(/\r?\n/).map((line) => /^#{2,5} /.test(line) ? `##${line}` : line).join('\n');
+    output.push({ id, text: nested });
   }
   return output;
 }

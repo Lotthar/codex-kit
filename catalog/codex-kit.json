@@ -4,16 +4,49 @@
   "platforms": ["linux", "win32"],
   "presets": {
     "minimal": ["base-policy"],
-    "developer": ["base-policy", "ponytail", "ruflo", "graphify", "promptx", "clean-code"],
-    "personal": ["base-policy", "ponytail", "ruflo", "promptx", "clean-code"]
+    "developer": ["base-policy", "ponytail", "ruflo", "graphify", "workflow-skills", "promptx", "clean-code"],
+    "personal": ["base-policy", "ponytail", "ruflo", "workflow-skills", "promptx", "clean-code"]
   },
   "components": {
     "base-policy": { "kind": "policy", "scope": ["global", "project"], "source": "policies/global.md" },
-    "ponytail": { "kind": "plugin", "scope": ["global", "project"], "plugin": "ponytail@ponytail", "version": "4.8.4" },
+    "ponytail": { "kind": "plugin", "scope": ["global"], "plugin": "ponytail@ponytail", "version": "4.8.4" },
     "ruflo": { "kind": "mcp", "scope": ["global"], "command": "npx", "args": ["-y", "ruflo@3.28.0", "mcp", "start"], "approvalMode": "writes" },
-    "graphify": { "kind": "project-tool", "scope": ["project"], "version": "0.9.11", "legacyPath": "setup-graphify-codex.mjs" },
-    "promptx": { "kind": "project-tool", "scope": ["project"], "legacyPath": "promptx/setup-codex-prompt-enhancer.mjs" },
-    "clean-code": { "kind": "project-tool", "scope": ["project"], "legacyPath": "continuous-clean-code-refactor/SKILL.md" }
+    "graphify": {
+      "kind": "project-tool",
+      "scope": ["project"],
+      "version": "0.9.11",
+      "assets": [
+        { "source": "setup-graphify-codex.mjs", "target": ".codex-kit/tools/setup-graphify-codex.mjs" }
+      ]
+    },
+    "workflow-skills": {
+      "kind": "project-tool",
+      "scope": ["project"],
+      "assets": [
+        { "source": "workflow-skills/plan-with-subagents", "target": ".agents/skills/plan-with-subagents" },
+        { "source": "workflow-skills/implement-plan-with-subagents", "target": ".agents/skills/implement-plan-with-subagents" },
+        { "source": "workflow-skills/debug-fix-with-subagents", "target": ".agents/skills/debug-fix-with-subagents" },
+        { "source": "workflow-skills/qa-e2e-sweep", "target": ".agents/skills/qa-e2e-sweep" },
+        { "source": "workflow-skills/playwright-e2e-setup", "target": ".agents/skills/playwright-e2e-setup" },
+        { "source": "workflow-skills/ruflo-orchestration", "target": ".agents/skills/ruflo-orchestration" }
+      ]
+    },
+    "promptx": {
+      "kind": "project-tool",
+      "scope": ["project"],
+      "assets": [
+        { "source": "promptx/skills/prompt-enhancer", "target": ".agents/skills/prompt-enhancer" },
+        { "source": "promptx/promptx.mjs", "target": "tools/promptx/promptx.mjs" },
+        { "source": "promptx/templates", "target": "tools/promptx/templates" }
+      ]
+    },
+    "clean-code": {
+      "kind": "project-tool",
+      "scope": ["project"],
+      "assets": [
+        { "source": "continuous-clean-code-refactor", "target": ".agents/skills/continuous-clean-code-refactor" }
+      ]
+    }
   },
   "profiles": {
     "generic": { "source": "profiles/generic/AGENTS.md" },

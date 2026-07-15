@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ruflo Orchestration"
+  short_description: "Coordinate persistent multi-workstream efforts"
+  default_prompt: "Use $ruflo-orchestration to coordinate this multi-phase effort with Ruflo."

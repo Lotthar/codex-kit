@@ -1,0 +1,4 @@
+interface:
+  display_name: "Debug and Fix With Subagents"
+  short_description: "Diagnose and fix complex bugs with evidence"
+  default_prompt: "Use $debug-fix-with-subagents to investigate and fix this failure."
