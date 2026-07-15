@@ -9,6 +9,7 @@
   },
   "components": {
     "base-policy": { "kind": "policy", "scope": ["global", "project"], "source": "policies/global.md" },
+    "model-routing": { "kind": "policy", "scope": ["global"], "source": "policies/model-routing.md" },
     "ponytail": { "kind": "plugin", "scope": ["global"], "plugin": "ponytail@ponytail", "version": "4.8.4" },
     "ruflo": { "kind": "mcp", "scope": ["global"], "command": "npx", "args": ["-y", "ruflo@3.28.0", "mcp", "start"], "approvalMode": "writes" },
     "graphify": {

@@ -20,6 +20,10 @@ export async function validateCatalog() {
     if (!['policy', 'plugin', 'mcp', 'project-tool'].includes(component.kind)) throw new Error(`Component ${id} has an unsupported kind.`);
     if (!Array.isArray(component.scope)) throw new Error(`Component ${id} must declare scope.`);
     if (component.version && lock.components[id]?.version !== component.version) throw new Error(`Lock drift for ${id}.`);
+    if (component.kind === 'policy') {
+      const source = resolve(root, component.source ?? '');
+      if (!component.source || win32.isAbsolute(component.source) || source === root || !isWithin(root, source) || !exists(source)) throw new Error(`Component ${id} has an invalid policy source.`);
+    }
     for (const asset of component.assets ?? []) {
       const source = resolve(root, asset.source ?? '');
       if (!asset.source || win32.isAbsolute(asset.source) || source === root || !isWithin(root, source) || !exists(source)) throw new Error(`Component ${id} has an invalid asset source.`);

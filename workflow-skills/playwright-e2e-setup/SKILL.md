@@ -64,6 +64,8 @@ For a non-trivial setup spanning application discovery, auth, test architecture,
 - a CI/docs impact scout;
 - a final validation or diff reviewer.
 
+When Codex Kit model routing is installed, use `codex_kit_mapper` for repository/auth discovery, `codex_kit_support` for test and CI research, `codex_kit_worker` for isolated writer slices, and `codex_kit_reviewer` for final validation. Fall back to ordinary bounded roles when a Kit role is unavailable.
+
 Skip subagents for a small repair to an existing config. Subagents must not spawn children. Give writers non-overlapping file ownership; keep shared config, package manifests, lockfiles, and final integration in the parent thread. Never let multiple browser agents control the same app instance concurrently.
 
 ## Initial coverage

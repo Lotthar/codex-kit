@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0-beta.2
+
+- Added opt-in global model routing that resolves the available Codex model catalog into an orchestrator profile and namespaced mapper, worker, reviewer, and support agents.
+- Added `models status` and `models refresh --yes`; managed role files are transactional and preserve user-owned collisions.
+
 ## Unreleased
 
 - Expanded layered framework profiles with architecture boundaries, commands, tests, security guidance, and skill routing.

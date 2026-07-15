@@ -53,6 +53,8 @@ Optional delegation:
 - Spawn `regression_test_designer` before editing or immediately after choosing a fix strategy.
 - Spawn `patch_reviewer` after the patch and targeted validation are complete.
 
+When Codex Kit model routing is installed, prefer `codex_kit_mapper` for code/symptom mapping, `codex_kit_support` for logs and reproduction evidence, and `codex_kit_reviewer` for patch review. If a Kit role is unavailable, use the named role above or an ordinary bounded subagent with the same responsibility.
+
 Each subagent must receive a bounded evidence question and return concise structured findings. Do not paste raw full logs into the main thread unless they are short and decisive.
 
 ### Phase 3 — Parent synthesis

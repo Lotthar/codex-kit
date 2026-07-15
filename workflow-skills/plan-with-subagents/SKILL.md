@@ -20,6 +20,8 @@ For non-trivial work, spawn only the read-only planning subagents that can inves
 - `test_planner`
 - `implementation_scout`
 
+When Codex Kit model routing is installed, use `codex_kit_mapper` for repository mapping and `codex_kit_support` for independent risk, test, or option research. If either role is unavailable, use the named role above or one ordinary bounded read-only subagent; never block planning on a model name.
+
 Skip delegation for trivial and small targeted changes when a direct plan is cheaper and equally reliable. Use one delegation level only: planning subagents must not spawn children.
 
 ## Rules

@@ -61,8 +61,24 @@ The wizard always presents these recommendations:
 - **Ponytail** — the global plugin used for reuse-first, dependency-light, smallest-correct implementation decisions.
 - **Ruflo** — the global MCP used only when three or more dependent phases, multiple services/repositories, or durable task memory justify persistent orchestration.
 - **Graphify** — a project-local structural map. It is always recommended; large repositories and monorepos receive stronger guidance. Adapter provisioning is opt-in, and graph builds and hooks remain separate explicit actions.
+- **Model routing** — an optional global Codex profile and four custom-agent roles. It resolves the locally available catalog when applied, so the parent prefers Sol while bounded roles prefer Terra or Luna and fall back safely.
 
 Declining network access leaves Ponytail and Ruflo as visible follow-up recommendations. Codex Kit never installs a global integration or runs Graphify implicitly.
+
+## Optional dynamic model routing
+
+Model routing is global and opt-in: it never changes a repository's configuration or your existing global default model. Enable the global policy and roles once, then inspect or refresh the role selections:
+
+```text
+codex-kit setup --model-routing --yes
+codex-kit models status              # read-only
+codex-kit models refresh --yes       # updates only Kit-owned role files
+codex --profile codex-kit-orchestrator
+```
+
+At refresh time, Codex Kit reads `codex debug models`, selects the first available candidate in each tier, and writes only its namespaced `codex_kit_*` agents. The main profile prefers `gpt-5.6-sol`, then GPT-5.5 and GPT-5.4; mapper, worker, and reviewer roles prefer Terra; the support role prefers Luna. Missing candidates produce an inheriting role rather than a failed setup. Refresh after model availability changes.
+
+The four roles are optional accelerators: `codex_kit_mapper` for read-only context mapping, `codex_kit_worker` for isolated implementation slices, `codex_kit_reviewer` for validation, and `codex_kit_support` for logs and documentation checks. Workflow skills fall back to ordinary bounded Codex subagents when a role is unavailable. Ruflo remains a separate provider and coordination system; its model aliases never control native Codex agents.
 
 ## Profiles and generated guidance
 
@@ -114,6 +130,8 @@ node tools/promptx/promptx.mjs --refresh-profile
 | --- | --- |
 | `wizard` | Guided detection, recommendations, preview, consent, and apply |
 | `setup --preset developer` | Plan global setup; add `--allow-network --yes` to install global integrations |
+| `setup --model-routing` | Include the optional global model-routing profile and roles in setup |
+| `models status`, `models refresh --yes` | Inspect or refresh Kit-owned capability-aware global model roles |
 | `project init`, `plan`, `apply`, `refresh`, `status` | Manage a Git project's desired Codex setup |
 | `component add/remove/list` | Change selected project components |
 | `skill import` | Copy one validated local skill with provenance |

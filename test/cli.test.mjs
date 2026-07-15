@@ -10,9 +10,10 @@ test('always recommends the scoped developer foundation', () => {
   assert.deepEqual(foundationRecommendations().map(({ id, scope }) => ({ id, scope })), [
     { id: 'ponytail', scope: 'global' },
     { id: 'ruflo', scope: 'global' },
+    { id: 'model-routing', scope: 'global' },
     { id: 'graphify', scope: 'project' }
   ]);
-  assert.match(foundationRecommendations(true)[2].detail, /strongly recommended/);
+  assert.match(foundationRecommendations(true)[3].detail, /strongly recommended/);
 });
 
 test('supports flags before commands and rejects unknown flags', async () => {

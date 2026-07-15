@@ -3,7 +3,7 @@ import { isatty } from 'node:tty';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { action, atomicWrite, print } from './util.mjs';
-import { applyGlobal, checkUpdates, codexHome, globalPlan, safeExport, setAllowlistedConfig } from './global.mjs';
+import { applyGlobal, applyModelRoutingPlan, checkUpdates, codexHome, globalPlan, modelRoutingPlan, modelRoutingStatus, safeExport, setAllowlistedConfig } from './global.mjs';
 import { applyProject, doctor, findProjectRoot, initProject, modifyProject, projectDiff, projectPlan, projectStatus, rollbackProject } from './project.mjs';
 import { enrich, sanitizedInventory } from './enrichment.mjs';
 import { importSkill } from './skills.mjs';
@@ -13,7 +13,8 @@ const help = `Codex Kit — reproducible Codex setup
 
 Usage:
   codex-kit wizard
-  codex-kit setup [--preset NAME] [--yes] [--allow-network]
+  codex-kit setup [--preset NAME] [--model-routing] [--yes] [--allow-network]
+  codex-kit models status|refresh [--home PATH] [--yes]
   codex-kit project init|plan|apply|refresh|status [--root PATH]
   codex-kit component add|remove|list ID [--root PATH]
   codex-kit skill import NAME --source PATH [--yes]
@@ -28,7 +29,7 @@ Usage:
 Mutations preview by default. --yes applies; --dry-run always previews; --json never prompts.`;
 
 const optionSpec = {
-  yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, json: { type: 'boolean' }, help: { type: 'boolean' }, check: { type: 'boolean' }, 'include-content': { type: 'boolean' }, 'allow-network': { type: 'boolean' }, enrich: { type: 'boolean' }, global: { type: 'boolean' }, preset: { type: 'string' }, home: { type: 'string' }, root: { type: 'string' }, source: { type: 'string' }, output: { type: 'string' }, transaction: { type: 'string' }, value: { type: 'string' }
+  yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, json: { type: 'boolean' }, help: { type: 'boolean' }, check: { type: 'boolean' }, 'include-content': { type: 'boolean' }, 'allow-network': { type: 'boolean' }, 'model-routing': { type: 'boolean' }, enrich: { type: 'boolean' }, global: { type: 'boolean' }, preset: { type: 'string' }, home: { type: 'string' }, root: { type: 'string' }, source: { type: 'string' }, output: { type: 'string' }, transaction: { type: 'string' }, value: { type: 'string' }
 };
 
 const execute = (values) => Boolean(values.yes) && !values['dry-run'];
@@ -38,6 +39,7 @@ export function foundationRecommendations(graphifyRecommended = false) {
   return [
     { id: 'ponytail', scope: 'global', detail: 'everyday simplicity and the smallest correct implementation' },
     { id: 'ruflo', scope: 'global', detail: 'durable coordination for three or more dependent workstreams' },
+    { id: 'model-routing', scope: 'global', detail: 'optional capability-aware parent and subagent model roles' },
     { id: 'graphify', scope: 'project', detail: graphifyRecommended ? 'structural repository context; strongly recommended for this project' : 'structural repository context as the codebase grows' }
   ];
 }
@@ -54,6 +56,7 @@ async function runWizard(values) {
     const preset = (await rl.question('Preset (minimal/developer/personal) [developer]: ')).trim() || 'developer';
     if (!['project', 'global', 'both'].includes(scope)) throw new Error('Scope must be project, global, or both.');
     const allowNetwork = scope === 'project' ? false : (await rl.question('Install the recommended global Ponytail plugin and Ruflo MCP (network access)? (y/N): ')).trim().toLowerCase() === 'y';
+    const modelRouting = scope === 'project' ? false : (await rl.question('Configure optional dynamic Codex model-routing roles? (y/N): ')).trim().toLowerCase() === 'y';
     const plans = [];
     const recommendations = foundationRecommendations();
     if (scope !== 'global') {
@@ -73,7 +76,7 @@ async function runWizard(values) {
       }
       plans.push(plan);
     }
-    if (scope !== 'project') plans.push(await globalPlan({ preset, home: values.home || codexHome(), allowNetwork }));
+    if (scope !== 'project') plans.push(await globalPlan({ preset, home: values.home || codexHome(), allowNetwork, modelRouting }));
     const recommendationActions = recommendations.map((item) => action('recommended', `${item.id} (${item.scope})`, item.detail));
     if (scope === 'project') recommendationActions.push(action('recommended', 'configure global foundation later', 'run codex-kit setup --preset developer --allow-network --yes when ready'));
     print({ status: 'ok', actions: [...recommendationActions, ...plans.flatMap((plan) => plan.actions)] }, false);
@@ -94,8 +97,14 @@ export async function main(argv = process.argv.slice(2)) {
     let result;
     if (command === 'wizard') result = await runWizard(values);
     else if (command === 'setup' || command === 'apply') {
-      const plan = await globalPlan({ preset: values.preset || 'developer', home: values.home || codexHome(), allowNetwork: values['allow-network'] });
+      const plan = await globalPlan({ preset: values.preset || 'developer', home: values.home || codexHome(), allowNetwork: values['allow-network'], modelRouting: values['model-routing'] });
       result = shouldApply ? await applyGlobal(plan, values['allow-network']) : plan;
+    } else if (command === 'models' && ['status', 'plan', 'refresh', 'apply'].includes(subcommand)) {
+      if (subcommand === 'status') result = await modelRoutingStatus({ home: values.home || codexHome() });
+      else {
+        const plan = await modelRoutingPlan({ home: values.home || codexHome() });
+        result = ['refresh', 'apply'].includes(subcommand) && shouldApply ? await applyModelRoutingPlan(plan) : plan;
+      }
     } else if (command === 'project' && ['init', 'plan', 'apply', 'refresh'].includes(subcommand)) {
       const root = values.root || process.cwd();
       const shouldExecute = ['init', 'refresh', 'apply'].includes(subcommand) && shouldApply;

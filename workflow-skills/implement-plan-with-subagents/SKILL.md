@@ -80,6 +80,8 @@ For plans that change public behavior, APIs, configuration, user flows, or docs,
 
 - `implement_docs_scout`
 
+When Codex Kit model routing is installed, prefer `codex_kit_mapper` for mapping, `codex_kit_support` for plan guards and documentation checks, `codex_kit_worker` for non-overlapping implementation/test slices, and `codex_kit_reviewer` for validation and final diff review. If a Kit role is unavailable, use the named role above or an ordinary bounded subagent with the same responsibility.
+
 Wait for the read-only subagents to finish. Synthesize their results before writing code.
 
 For trivial and small targeted plans, implement directly when delegation would cost more than the change. Use one delegation level only: subagents must not spawn children or create a second task tree.

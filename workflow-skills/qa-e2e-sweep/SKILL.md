@@ -39,6 +39,8 @@ For a broad sweep with three or more independent surfaces, use one level of boun
 - Use only one visual browser operator per app instance; parallelize read-only mapping, CLI tests, APIs, databases, and log analysis.
 - Wait for all relevant evidence, then dedupe and normalize it in the parent.
 
+When Codex Kit model routing is installed, use `codex_kit_mapper` for stack discovery, `codex_kit_support` for independent evidence slices, and `codex_kit_reviewer` to review the final finding set. Fall back to ordinary bounded roles when a Kit role is unavailable.
+
 ## Tool choice
 
 - Prefer the repository's existing unit, integration, component, and E2E runners.
