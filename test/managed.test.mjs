@@ -23,3 +23,9 @@ test('migrates the v1 project marker pair', () => {
   assert.match(output, /codex-kit:project:start/);
   assert.doesNotMatch(output, /codex-kit:managed:start/);
 });
+
+test('labels global components without implying project scope', () => {
+  const block = renderManagedBlock({ scope: 'global', components: ['obsidian-brain'] });
+  assert.match(block, /Global component: `obsidian-brain`/);
+  assert.doesNotMatch(block, /Project component: `obsidian-brain`/);
+});

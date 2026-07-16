@@ -8,13 +8,18 @@ import { applyProject, doctor, findProjectRoot, initProject, modifyProject, proj
 import { enrich, sanitizedInventory } from './enrichment.mjs';
 import { importSkill } from './skills.mjs';
 import { listTransactions } from './transaction.mjs';
+import { brainAudit, brainConfigure, brainInit, brainRecall, brainRemember, brainStatus } from './obsidian.mjs';
 
 const help = `Codex Kit — reproducible Codex setup
 
 Usage:
   codex-kit wizard
-  codex-kit setup [--preset NAME] [--model-routing] [--yes] [--allow-network]
+  codex-kit setup [--preset NAME] [--model-routing] [--obsidian] [--memories] [--yes] [--allow-network]
   codex-kit models status|refresh [--home PATH] [--yes]
+  codex-kit brain configure --vault NAME [--home PATH] [--yes]
+  codex-kit brain init|status|audit [--root PATH]
+  codex-kit brain recall --query TEXT [--cross-project] [--root PATH]
+  codex-kit brain remember --kind KIND --title TEXT --summary TEXT [--details TEXT] [--source REF] [--supersedes KEY] [--yes]
   codex-kit project init|plan|apply|refresh|status [--root PATH]
   codex-kit component add|remove|list ID [--root PATH]
   codex-kit skill import NAME --source PATH [--yes]
@@ -29,7 +34,7 @@ Usage:
 Mutations preview by default. --yes applies; --dry-run always previews; --json never prompts.`;
 
 const optionSpec = {
-  yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, json: { type: 'boolean' }, help: { type: 'boolean' }, check: { type: 'boolean' }, 'include-content': { type: 'boolean' }, 'allow-network': { type: 'boolean' }, 'model-routing': { type: 'boolean' }, enrich: { type: 'boolean' }, global: { type: 'boolean' }, preset: { type: 'string' }, home: { type: 'string' }, root: { type: 'string' }, source: { type: 'string' }, output: { type: 'string' }, transaction: { type: 'string' }, value: { type: 'string' }
+  yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, json: { type: 'boolean' }, help: { type: 'boolean' }, check: { type: 'boolean' }, 'include-content': { type: 'boolean' }, 'allow-network': { type: 'boolean' }, 'model-routing': { type: 'boolean' }, memories: { type: 'boolean' }, obsidian: { type: 'boolean' }, 'cross-project': { type: 'boolean' }, enrich: { type: 'boolean' }, global: { type: 'boolean' }, preset: { type: 'string' }, home: { type: 'string' }, root: { type: 'string' }, source: { type: 'string' }, output: { type: 'string' }, transaction: { type: 'string' }, value: { type: 'string' }, vault: { type: 'string' }, query: { type: 'string' }, kind: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' }, details: { type: 'string' }, supersedes: { type: 'string' }
 };
 
 const execute = (values) => Boolean(values.yes) && !values['dry-run'];
@@ -40,7 +45,8 @@ export function foundationRecommendations(graphifyRecommended = false) {
     { id: 'ponytail', scope: 'global', detail: 'everyday simplicity and the smallest correct implementation' },
     { id: 'ruflo', scope: 'global', detail: 'durable coordination for three or more dependent workstreams' },
     { id: 'model-routing', scope: 'global', detail: 'optional capability-aware parent and subagent model roles' },
-    { id: 'graphify', scope: 'project', detail: graphifyRecommended ? 'structural repository context; strongly recommended for this project' : 'structural repository context as the codebase grows' }
+    { id: 'graphify', scope: 'project', detail: graphifyRecommended ? 'structural repository context; strongly recommended for this project' : 'structural repository context as the codebase grows' },
+    { id: 'obsidian-brain', scope: 'global + project', detail: 'optional durable curated project memory; included by the personal preset' }
   ];
 }
 
@@ -57,6 +63,9 @@ async function runWizard(values) {
     if (!['project', 'global', 'both'].includes(scope)) throw new Error('Scope must be project, global, or both.');
     const allowNetwork = scope === 'project' ? false : (await rl.question('Install the recommended global Ponytail plugin and Ruflo MCP (network access)? (y/N): ')).trim().toLowerCase() === 'y';
     const modelRouting = scope === 'project' ? false : (await rl.question('Configure optional dynamic Codex model-routing roles? (y/N): ')).trim().toLowerCase() === 'y';
+    const useBrain = preset === 'personal' || (await rl.question('Enable the optional Obsidian Project Brain? (y/N): ')).trim().toLowerCase() === 'y';
+    const vault = useBrain ? (await rl.question('Dedicated Obsidian vault name [Codex Brain]: ')).trim() || 'Codex Brain' : '';
+    const memories = scope === 'project' ? false : (await rl.question('Enable experimental native Codex memories as a separate companion? (y/N): ')).trim().toLowerCase() === 'y';
     const plans = [];
     const recommendations = foundationRecommendations();
     if (scope !== 'global') {
@@ -74,15 +83,25 @@ async function runWizard(values) {
         plan.config.tools.graphify.install = true;
         plan = await projectPlan({ root: plan.root, requestedConfig: plan.config });
       }
+      if (useBrain && !plan.components.includes('obsidian-brain')) {
+        plan.config.components.include = [...new Set([...(plan.config.components.include ?? []), 'obsidian-brain'])];
+        plan = await projectPlan({ root: plan.root, requestedConfig: plan.config });
+      }
       plans.push(plan);
     }
-    if (scope !== 'project') plans.push(await globalPlan({ preset, home: values.home || codexHome(), allowNetwork, modelRouting }));
+    if (scope !== 'project') plans.push(await globalPlan({ preset, home: values.home || codexHome(), allowNetwork, modelRouting, memories, obsidian: useBrain }));
     const recommendationActions = recommendations.map((item) => action('recommended', `${item.id} (${item.scope})`, item.detail));
     if (scope === 'project') recommendationActions.push(action('recommended', 'configure global foundation later', 'run codex-kit setup --preset developer --allow-network --yes when ready'));
-    print({ status: 'ok', actions: [...recommendationActions, ...plans.flatMap((plan) => plan.actions)] }, false);
+    const brainActions = useBrain ? [action('planned', 'bind Obsidian Project Brain vault', vault), ...(plans.some((plan) => plan.root && plan.components.includes('obsidian-brain')) ? [action('planned', 'initialize project brain namespace', 'after project setup')] : [])] : [];
+    print({ status: 'ok', actions: [...recommendationActions, ...plans.flatMap((plan) => plan.actions), ...brainActions] }, false);
     if ((await rl.question('Apply this plan? (y/N): ')).trim().toLowerCase() !== 'y') return { status: 'ok', actions: [action('skipped', 'apply wizard plan', 'not confirmed')] };
     const results = [];
-    for (const plan of plans) results.push(plan.root ? await applyProject(plan) : await applyGlobal(plan, allowNetwork));
+    if (useBrain) results.push(await brainConfigure({ home: values.home || codexHome(), vault, execute: true }));
+    for (const plan of plans) {
+      const applied = plan.root ? await applyProject(plan) : await applyGlobal(plan, allowNetwork);
+      results.push(applied);
+      if (plan.root && plan.components.includes('obsidian-brain')) results.push(await brainInit({ home: values.home || codexHome(), projectKey: plan.config.tools.obsidian.projectKey, execute: true }));
+    }
     return { status: results.some((item) => item.status !== 'ok') ? 'partial' : 'ok', actions: results.flatMap((item) => item.actions) };
   } finally { rl.close(); }
 }
@@ -97,7 +116,7 @@ export async function main(argv = process.argv.slice(2)) {
     let result;
     if (command === 'wizard') result = await runWizard(values);
     else if (command === 'setup' || command === 'apply') {
-      const plan = await globalPlan({ preset: values.preset || 'developer', home: values.home || codexHome(), allowNetwork: values['allow-network'], modelRouting: values['model-routing'] });
+      const plan = await globalPlan({ preset: values.preset || 'developer', home: values.home || codexHome(), allowNetwork: values['allow-network'], modelRouting: values['model-routing'], memories: values.memories, obsidian: values.obsidian });
       result = shouldApply ? await applyGlobal(plan, values['allow-network']) : plan;
     } else if (command === 'models' && ['status', 'plan', 'refresh', 'apply'].includes(subcommand)) {
       if (subcommand === 'status') result = await modelRoutingStatus({ home: values.home || codexHome() });
@@ -105,6 +124,25 @@ export async function main(argv = process.argv.slice(2)) {
         const plan = await modelRoutingPlan({ home: values.home || codexHome() });
         result = ['refresh', 'apply'].includes(subcommand) && shouldApply ? await applyModelRoutingPlan(plan) : plan;
       }
+    } else if (command === 'brain' && subcommand === 'configure') {
+      if (!values.vault) throw new Error('Use: codex-kit brain configure --vault NAME --yes');
+      result = await brainConfigure({ home: values.home || codexHome(), vault: values.vault, execute: shouldApply });
+    } else if (command === 'brain' && ['init', 'status', 'recall', 'remember', 'audit'].includes(subcommand)) {
+      let root;
+      let projectKey;
+      try {
+        const project = await projectStatus(values.root || process.cwd());
+        root = project.root;
+        projectKey = project.config?.tools?.obsidian?.projectKey;
+      } catch (error) {
+        if (subcommand !== 'status') throw error;
+      }
+      if (subcommand !== 'status' && !projectKey) result = { status: 'partial', actions: [action('recommended', 'initialize project Obsidian configuration', 'codex-kit project init --preset personal --yes')] };
+      else if (subcommand === 'init') result = await brainInit({ home: values.home || codexHome(), projectKey, execute: shouldApply });
+      else if (subcommand === 'status') result = await brainStatus({ home: values.home || codexHome(), projectKey });
+      else if (subcommand === 'recall') result = await brainRecall({ home: values.home || codexHome(), root, projectKey, query: values.query, crossProject: values['cross-project'] });
+      else if (subcommand === 'remember') result = await brainRemember({ home: values.home || codexHome(), root, projectKey, kind: values.kind, title: values.title, summary: values.summary, details: values.details, source: values.source, supersedes: values.supersedes, execute: shouldApply });
+      else result = await brainAudit({ home: values.home || codexHome(), root, projectKey, crossProject: values['cross-project'] });
     } else if (command === 'project' && ['init', 'plan', 'apply', 'refresh'].includes(subcommand)) {
       const root = values.root || process.cwd();
       const shouldExecute = ['init', 'refresh', 'apply'].includes(subcommand) && shouldApply;

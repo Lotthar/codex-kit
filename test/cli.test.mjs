@@ -11,9 +11,20 @@ test('always recommends the scoped developer foundation', () => {
     { id: 'ponytail', scope: 'global' },
     { id: 'ruflo', scope: 'global' },
     { id: 'model-routing', scope: 'global' },
-    { id: 'graphify', scope: 'project' }
+    { id: 'graphify', scope: 'project' },
+    { id: 'obsidian-brain', scope: 'global + project' }
   ]);
   assert.match(foundationRecommendations(true)[3].detail, /strongly recommended/);
+});
+
+test('routes Obsidian brain previews without requiring the desktop app', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'codex-kit-cli-brain-'));
+  const home = await mkdtemp(join(tmpdir(), 'codex-kit-cli-home-'));
+  assert.equal(run('git', ['-C', root, 'init']).status, 0);
+  await writeFile(join(root, 'package.json'), '{}');
+  assert.equal(await main(['brain', 'configure', '--vault', 'Codex Brain', '--home', home, '--json']), 0);
+  assert.equal(await main(['brain', 'status', '--root', root, '--home', home, '--json']), 0);
+  assert.equal(await main(['brain', 'init', '--root', root, '--home', home, '--json']), 0);
 });
 
 test('supports flags before commands and rejects unknown flags', async () => {

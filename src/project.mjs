@@ -6,6 +6,7 @@ import { renderManagedBlock, mergeManagedBlock } from './managed.mjs';
 import { detectProfiles, profileInstructions, projectName } from './profiles.mjs';
 import { kitRoot, presetComponents, validateCatalog } from './manifest.mjs';
 import { beginTransaction, copyTracked, finishTransaction, listTransactions, pathHash, removeTracked, replaceTracked, rollbackTransaction, withLock, writeTracked } from './transaction.mjs';
+import { deriveProjectKey } from './obsidian.mjs';
 
 const configPath = (root) => join(root, '.codex-kit', 'config.json');
 const statePath = (root) => join(root, '.codex-kit', 'state.json');
@@ -20,8 +21,8 @@ async function desiredConfig(root, preset) {
   const existing = await readJson(configPath(root), null);
   if (existing?.schemaVersion === 2) return existing;
   const legacy = await readJson(statePath(root), null);
-  if (legacy?.schemaVersion === 1) return { schemaVersion: 2, preset: 'minimal', profiles: { mode: 'auto', include: legacy.profiles ?? [], exclude: [] }, components: { include: legacy.components ?? [], exclude: [] }, features: { enrichment: false }, tools: { graphify: { install: false, build: false, hooks: false } }, migratedFrom: 1 };
-  return { schemaVersion: 2, preset, profiles: { mode: 'auto', include: [], exclude: [] }, components: { include: [], exclude: [] }, features: { enrichment: false }, tools: { graphify: { install: false, build: false, hooks: false } } };
+  if (legacy?.schemaVersion === 1) return { schemaVersion: 2, preset: 'minimal', profiles: { mode: 'auto', include: legacy.profiles ?? [], exclude: [] }, components: { include: legacy.components ?? [], exclude: [] }, features: { enrichment: false }, tools: { graphify: { install: false, build: false, hooks: false }, obsidian: {} }, migratedFrom: 1 };
+  return { schemaVersion: 2, preset, profiles: { mode: 'auto', include: [], exclude: [] }, components: { include: [], exclude: [] }, features: { enrichment: false }, tools: { graphify: { install: false, build: false, hooks: false }, obsidian: {} } };
 }
 
 async function resolveProfiles(detection, config) {
@@ -57,6 +58,13 @@ export async function projectPlan({ root, preset = 'developer', requestedConfig 
   const config = requestedConfig ?? await desiredConfig(projectRoot, preset);
   const detection = await detectProfiles(projectRoot);
   const [profiles, components] = [await resolveProfiles(detection, config), await resolveComponents(config)];
+  if (components.includes('obsidian-brain')) {
+    config.tools ??= {};
+    config.tools.obsidian ??= {};
+    const key = await deriveProjectKey({ root: projectRoot, existing: config.tools.obsidian.projectKey, allocate: false });
+    if (key) config.tools.obsidian.projectKey = key;
+    else delete config.tools.obsidian.projectKey;
+  }
   const instructions = await profileInstructions(profiles);
   const assets = await projectAssets(components, config);
   const actions = [
@@ -74,6 +82,12 @@ export async function projectPlan({ root, preset = 'developer', requestedConfig 
 
 export async function applyProject(plan) {
   if (plan.status === 'conflict') return plan;
+  if (plan.components.includes('obsidian-brain') && !plan.config.tools?.obsidian?.projectKey) {
+    plan.config.tools ??= {};
+    plan.config.tools.obsidian ??= {};
+    plan.config.tools.obsidian.projectKey = await deriveProjectKey({ root: plan.root, existing: null, allocate: true });
+    plan.actions.push(action('planned', 'allocate Obsidian project namespace', 'collision-resistant project key'));
+  }
   return withLock(plan.root, async () => {
     const transaction = await beginTransaction(plan.root, 'project');
     try {
@@ -164,10 +178,16 @@ export async function rollbackProject(root, transactionId) {
 }
 
 export function doctor() {
-  const checks = [['Node', process.execPath], ['Git', 'git'], ['Codex CLI', 'codex'], ['GitHub CLI', 'gh']];
-  const actions = checks.map(([label, command]) => {
-    const result = command === process.execPath ? { status: 0, stdout: process.version } : run(command, ['--version']);
-    return action(result.status === 0 ? 'ready' : 'warning', label, (result.stdout || result.stderr || result.error || '').trim().split(/\r?\n/)[0]);
+  const checks = [
+    { label: 'Node', command: process.execPath },
+    { label: 'Git', command: 'git' },
+    { label: 'Codex CLI', command: 'codex' },
+    { label: 'GitHub CLI', command: 'gh' },
+    { label: 'Obsidian CLI (optional)', command: 'obsidian', args: ['version'], optional: true },
+  ];
+  const actions = checks.map(({ label, command, args = ['--version'], optional = false }) => {
+    const result = command === process.execPath ? { status: 0, stdout: process.version } : run(command, args);
+    return action(result.status === 0 ? 'ready' : optional ? 'recommended' : 'warning', label, (result.stdout || result.stderr || result.error || '').trim().split(/\r?\n/)[0]);
   });
   return { status: actions.some((item) => item.state === 'warning') ? 'partial' : 'ok', actions };
 }

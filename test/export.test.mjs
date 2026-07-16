@@ -9,8 +9,11 @@ test('exports only portable inventory', async () => {
   const source = await mkdtemp(join(tmpdir(), 'codex-kit-export-'));
   await writeFile(join(source, 'AGENTS.md'), 'private rules');
   await writeFile(join(source, 'auth.json'), 'secret');
+  await mkdir(join(source, '.codex-kit'), { recursive: true });
+  await writeFile(join(source, '.codex-kit', 'obsidian.json'), '{"vault":"Private Brain"}');
   await mkdir(join(source, 'skills', 'safe-skill'), { recursive: true });
   const result = await safeExport(source);
   assert.deepEqual(result.artifacts, [{ type: 'policy', path: 'AGENTS.md' }, { type: 'skills', names: ['safe-skill'] }]);
   assert.equal(JSON.stringify(result).includes('secret'), false);
+  assert.equal(JSON.stringify(result).includes('Private Brain'), false);
 });

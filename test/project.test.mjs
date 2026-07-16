@@ -106,3 +106,28 @@ test('project commands require Git', async () => {
   const root = await mkdtemp(join(tmpdir(), 'codex-kit-no-git-'));
   await assert.rejects(() => initProject({ root }), /Git repository/);
 });
+
+test('personal preset provisions a portable Obsidian brain key and skill', async () => {
+  const root = await fixture();
+  assert.equal(run('git', ['-C', root, 'remote', 'add', 'origin', 'git@github.com:Example/Portable-Brain.git']).status, 0);
+  const preview = await projectPlan({ root, preset: 'personal' });
+  assert.equal(preview.components.includes('obsidian-brain'), true);
+  assert.match(preview.config.tools.obsidian.projectKey, /^portable-brain-[a-f0-9]{10}$/);
+  const applied = await applyProject(preview);
+  assert.equal(applied.status, 'ok');
+  assert.equal((await import('node:fs')).existsSync(join(root, '.agents', 'skills', 'obsidian-project-brain', 'SKILL.md')), true);
+  const refreshed = await projectPlan({ root, preset: 'developer' });
+  assert.equal(refreshed.config.tools.obsidian.projectKey, preview.config.tools.obsidian.projectKey);
+});
+
+test('empty repository previews a pending brain namespace and allocates it once on apply', async () => {
+  const root = await fixture();
+  const first = await projectPlan({ root, preset: 'personal' });
+  const second = await projectPlan({ root, preset: 'personal' });
+  assert.equal(first.config.tools.obsidian.projectKey, undefined);
+  assert.equal(second.config.tools.obsidian.projectKey, undefined);
+  const applied = await applyProject(first);
+  assert.match(applied.config.tools.obsidian.projectKey, /^[a-z0-9-]+-[a-f0-9]{10}$/);
+  const refreshed = await projectPlan({ root, preset: 'personal' });
+  assert.equal(refreshed.config.tools.obsidian.projectKey, applied.config.tools.obsidian.projectKey);
+});

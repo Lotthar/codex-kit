@@ -7,7 +7,8 @@ export const END = markers().end;
 export function renderManagedBlock({ profiles = [], components = [], instructions = [], scope = 'project' }) {
   const pair = markers(scope);
   const profileText = profiles.map((profile) => `- Active profile: \`${profile}\`.`).join('\n');
-  const componentText = components.map((component) => `- Project component: \`${component}\`.`).join('\n');
+  const componentLabel = scope === 'global' ? 'Global component' : 'Project component';
+  const componentText = components.map((component) => `- ${componentLabel}: \`${component}\`.`).join('\n');
   const instructionText = instructions.map((item) => `### ${item.id}\n\n${item.text}`).join('\n\n');
   return `${pair.start}\n## Codex Kit\n\nThis block is maintained by Codex Kit. Edit project-specific instructions outside it.\n\n${profileText}\n${componentText}\n\n- Follow human-authored repository instructions outside this managed block.\n- Use Ponytail for coding simplicity when the global plugin is available.\n- Use \`$plan-with-subagents\` for non-trivial planning and \`$implement-plan-with-subagents\` for approved plans.\n- Use native Codex subagents for bounded current-task work; use Ruflo only for durable coordination across three or more dependent workstreams.\n- Graphify installation, graph builds, and hooks require explicit project consent.\n${instructionText ? `\n\n${instructionText}\n` : ''}${pair.end}`;
 }

@@ -7,6 +7,10 @@
 
 ## Unreleased
 
+- Added the optional Obsidian Project Brain integration: official-CLI configuration, stable project namespaces, bounded recall, append-only durable notes, audit/status commands, and a global Codex skill and policy.
+- Added the Project Brain to the `personal` preset while keeping it opt-in for `developer`, with machine-local vault selection and commit-friendly project keys for repeatable setup on new devices.
+- Added explicit opt-in support for native Codex memories as a separate experimental layer.
+- Documented one-time Obsidian CLI setup, normal no-recurring-command use, cross-platform caveats, new-device onboarding, and the Project Brain trust and privacy model.
 - Expanded layered framework profiles with architecture boundaries, commands, tests, security guidance, and skill routing.
 - Added portable planning, implementation, debugging, QA, Playwright, and Ruflo skills with proportional one-level subagent workflows.
 - Consolidated loose setup prompts into packaged project skills and PromptX runtime assets.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Continuous Clean Code Refactor"
+  short_description: "Behavior-preserving cleanup workflow for existing repositories."
+  default_prompt: "Clean this repository for readability, maintainability, clean architecture, SOLID boundaries, guard clauses, file/function size, and idiomatic patterns while preserving behavior and running relevant checks."

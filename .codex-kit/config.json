@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 2,
+  "preset": "minimal",
+  "profiles": {
+    "mode": "auto",
+    "include": [
+      "node"
+    ],
+    "exclude": []
+  },
+  "components": {
+    "include": [
+      "base-policy",
+      "ponytail",
+      "graphify",
+      "promptx",
+      "clean-code",
+      "obsidian-brain"
+    ],
+    "exclude": []
+  },
+  "features": {
+    "enrichment": false
+  },
+  "tools": {
+    "graphify": {
+      "install": false,
+      "build": false,
+      "hooks": false
+    },
+    "obsidian": {
+      "projectKey": "codex-kit-452f62c0c5"
+    }
+  },
+  "migratedFrom": 1
+}

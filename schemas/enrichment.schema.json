@@ -13,7 +13,7 @@
         "additionalProperties": false,
         "required": ["id", "reason"],
         "properties": {
-          "id": { "type": "string", "enum": ["base-policy", "ponytail", "ruflo", "graphify", "promptx", "clean-code"] },
+          "id": { "type": "string", "enum": ["base-policy", "ponytail", "ruflo", "graphify", "promptx", "clean-code", "obsidian-brain"] },
           "reason": { "type": "string", "maxLength": 300 }
         }
       }

@@ -29,6 +29,11 @@ export async function validateCatalog() {
       if (!asset.source || win32.isAbsolute(asset.source) || source === root || !isWithin(root, source) || !exists(source)) throw new Error(`Component ${id} has an invalid asset source.`);
       if (!asset.target || isAbsolute(asset.target) || win32.isAbsolute(asset.target) || asset.target.split(/[\\/]/).includes('..')) throw new Error(`Component ${id} asset target must stay inside the project.`);
     }
+    for (const asset of component.globalAssets ?? []) {
+      const source = resolve(root, asset.source ?? '');
+      if (!asset.source || win32.isAbsolute(asset.source) || source === root || !isWithin(root, source) || !exists(source)) throw new Error(`Component ${id} has an invalid global asset source.`);
+      if (!asset.target || isAbsolute(asset.target) || win32.isAbsolute(asset.target) || asset.target.split(/[\\/]/).includes('..')) throw new Error(`Component ${id} global asset target must stay inside Codex home.`);
+    }
   }
   for (const [id, profile] of Object.entries(manifest.profiles)) {
     if (!profile.source || !profile.source.startsWith('profiles/')) throw new Error(`Profile ${id} has an invalid source.`);

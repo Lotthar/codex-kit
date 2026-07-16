@@ -5,12 +5,13 @@ import { createHash } from 'node:crypto';
 import { action, exists, readJson, run } from './util.mjs';
 import { loadManifest, presetComponents } from './manifest.mjs';
 import { mergeManagedBlock, renderManagedBlock } from './managed.mjs';
-import { beginTransaction, finishTransaction, pathHash, removeTracked, withLock, writeTracked } from './transaction.mjs';
+import { beginTransaction, copyTracked, finishTransaction, pathHash, removeTracked, replaceTracked, withLock, writeTracked } from './transaction.mjs';
 import { readText } from './platform.mjs';
 import { readConfig, setTomlValues } from './config.mjs';
 import { modelRoutingStatePath, parseModelCatalog, resolveModelRouting, routingActions, routingSummary } from './model-routing.mjs';
 
 export const codexHome = () => process.env.CODEX_HOME || join(homedir(), '.codex');
+const globalAssetsStatePath = (home) => join(home, '.codex-kit', 'global-assets.json');
 
 function modelCatalog() {
   const result = run('codex', ['debug', 'models']);
@@ -22,21 +23,77 @@ function safeRoutingAsset(asset) {
   return asset;
 }
 
-export async function globalPlan({ preset = 'developer', home = codexHome(), allowNetwork = false, modelRouting = false, catalog = undefined }) {
+function safeGlobalAsset(asset) {
+  if (!asset || typeof asset.component !== 'string' || typeof asset.source !== 'string' || typeof asset.target !== 'string' || !asset.target || isAbsolute(asset.target) || win32.isAbsolute(asset.target) || asset.target.split(/[\\/]/).includes('..')) throw new Error('Invalid global asset.');
+  return asset;
+}
+
+function globalAssetsFor(components, manifest) {
+  return components.flatMap((component) => (manifest.components[component]?.globalAssets ?? []).map((asset) => safeGlobalAsset({ component, ...asset })));
+}
+
+export async function globalPlan({ preset = 'developer', home = codexHome(), allowNetwork = false, modelRouting = false, memories = false, obsidian = false, catalog = undefined }) {
   const manifest = await loadManifest();
-  const components = [...await presetComponents(preset), ...(modelRouting ? ['model-routing'] : [])];
+  const components = [...new Set([...await presetComponents(preset), ...(modelRouting ? ['model-routing'] : []), ...(obsidian ? ['obsidian-brain'] : [])])];
   const actions = [action('planned', `manage ${join(home, 'AGENTS.md')}`, 'bounded global policy block', { scope: 'global', reversibility: 'full' })];
+  const globalAssets = globalAssetsFor(components, manifest);
+  for (const asset of globalAssets) actions.push(action('planned', `provision ${asset.target}`, asset.component, { kind: 'global-asset', scope: 'global', reversibility: 'full' }));
   for (const id of components) {
     const component = manifest.components[id];
-    if (!component.scope.includes('global') || component.kind === 'policy') continue;
+    if (!component.scope.includes('global') || !['plugin', 'mcp'].includes(component.kind)) continue;
     const detail = component.kind === 'plugin' ? `${component.plugin} (locked ${component.version})` : `${component.command} ${component.args.join(' ')}`;
     actions.push(action(allowNetwork ? 'planned' : 'skipped', `install ${id}`, allowNetwork ? detail : `${detail}; pass --allow-network to execute`, { scope: 'global', requiresNetwork: true, reversibility: 'best-effort' }));
   }
   const routing = modelRouting ? resolveModelRouting(catalog === undefined ? modelCatalog() : catalog) : null;
   if (routing) actions.push(...routingActions(routing));
-  const plan = { status: 'ok', preset, home, components, ...(routing ? { models: routingSummary(routing) } : {}), actions };
+  if (memories) actions.push(action('planned', 'enable native Codex memories', 'experimental companion; Obsidian remains the curated project brain', { scope: 'global', reversibility: 'full' }));
+  const plan = { status: 'ok', preset, home, components, memories, ...(routing ? { models: routingSummary(routing) } : {}), actions };
+  Object.defineProperty(plan, 'globalAssets', { value: globalAssets });
   if (routing) Object.defineProperty(plan, 'routing', { value: routing });
   return plan;
+}
+
+async function applyGlobalAssets(transaction, home, desiredAssets) {
+  const statePath = globalAssetsStatePath(home);
+  const previous = await readJson(statePath, { assets: [] });
+  if (!Array.isArray(previous.assets ?? [])) throw new Error('Invalid global assets state.');
+  const previousAssets = new Map((previous.assets ?? []).map(safeGlobalAsset).map((asset) => [asset.target, asset]));
+  const installedAssets = [];
+  const actions = [];
+  for (const asset of desiredAssets.map(safeGlobalAsset)) {
+    const source = join((await import('./manifest.mjs')).kitRoot, asset.source);
+    const destination = join(home, asset.target);
+    const sourceHash = await pathHash(source);
+    if (!exists(destination)) {
+      await copyTracked(transaction, source, destination);
+      installedAssets.push({ component: asset.component, source: asset.source, target: asset.target, hash: sourceHash });
+      actions.push(action('changed', `provision ${asset.target}`, asset.component));
+      continue;
+    }
+    const currentHash = await pathHash(destination);
+    const owned = previousAssets.get(asset.target);
+    if (owned?.hash !== currentHash) {
+      actions.push(action(currentHash === sourceHash ? 'unchanged' : 'conflict', `provision ${asset.target}`, currentHash === sourceHash ? 'matching existing content preserved as user-owned' : 'existing user content preserved'));
+      continue;
+    }
+    if (currentHash !== sourceHash) {
+      await replaceTracked(transaction, source, destination);
+      actions.push(action('changed', `update ${asset.target}`, asset.component));
+    } else actions.push(action('unchanged', `provision ${asset.target}`, 'already matches Codex Kit'));
+    installedAssets.push({ component: asset.component, source: asset.source, target: asset.target, hash: sourceHash });
+  }
+  const desiredTargets = new Set(desiredAssets.map((asset) => asset.target));
+  for (const previousAsset of previousAssets.values()) if (!desiredTargets.has(previousAsset.target)) {
+    const destination = join(home, previousAsset.target);
+    if (!exists(destination)) continue;
+    if (await pathHash(destination) !== previousAsset.hash) actions.push(action('conflict', `remove ${previousAsset.target}`, 'modified content preserved'));
+    else {
+      await removeTracked(transaction, destination);
+      actions.push(action('changed', `remove ${previousAsset.target}`, 'component no longer selected'));
+    }
+  }
+  await writeTracked(transaction, statePath, `${JSON.stringify({ schemaVersion: 1, assets: installedAssets }, null, 2)}\n`);
+  return actions;
 }
 
 async function applyModelRouting(transaction, home, routing) {
@@ -128,7 +185,7 @@ export async function applyGlobal(plan, allowNetwork = false) {
     try {
       if (allowNetwork) for (const id of plan.components) {
         const component = manifest.components[id];
-        if (!component.scope.includes('global') || component.kind === 'policy') continue;
+        if (!component.scope.includes('global') || !['plugin', 'mcp'].includes(component.kind)) continue;
         const inspect = run('codex', component.kind === 'plugin' ? ['plugin', 'list'] : ['mcp', 'list']);
         const marker = component.kind === 'plugin' ? component.plugin.split('@')[0] : id;
         if (inspect.status === 0 && inspect.stdout.includes(marker)) {
@@ -146,9 +203,16 @@ export async function applyGlobal(plan, allowNetwork = false) {
       const instructions = await Promise.all(plan.components.filter((id) => manifest.components[id].scope.includes('global') && manifest.components[id].kind === 'policy').map(async (id) => ({ id, text: await readText(join((await import('./manifest.mjs')).kitRoot, manifest.components[id].source)) })));
       const policy = renderManagedBlock({ scope: 'global', components: plan.components.filter((id) => manifest.components[id].scope.includes('global')), profiles: [], instructions });
       await writeTracked(transaction, policyPath, mergeManagedBlock(original, policy, 'global'));
+      const assetActions = await applyGlobalAssets(transaction, plan.home, plan.globalAssets ?? globalAssetsFor(plan.components, manifest));
+      if (plan.memories) {
+        const configPath = join(plan.home, 'config.toml');
+        await writeTracked(transaction, configPath, setTomlValues(await readConfig(configPath), 'features', { memories: 'true' }));
+      }
       const routingActions = plan.routing ? await applyModelRouting(transaction, plan.home, plan.routing) : [];
       const receipt = await finishTransaction(transaction);
-      return { ...plan, status: routingActions.some((item) => item.state === 'conflict') ? 'partial' : 'ok', transactionId: receipt.id, actions: [...plan.actions.map((item) => item.state === 'planned' ? { ...item, state: 'changed' } : item), ...routingActions] };
+      const baseActions = plan.actions.filter((item) => item.kind !== 'global-asset').map((item) => item.state === 'planned' ? { ...item, state: 'changed' } : item);
+      const partial = [...assetActions, ...routingActions].some((item) => item.state === 'conflict');
+      return { ...plan, status: partial ? 'partial' : 'ok', transactionId: receipt.id, actions: [...baseActions, ...assetActions, ...routingActions] };
     } catch (error) {
       for (const item of introduced.reverse()) {
         const command = item.kind === 'plugin' ? ['plugin', 'remove', item.plugin] : ['mcp', 'remove', item.id];
