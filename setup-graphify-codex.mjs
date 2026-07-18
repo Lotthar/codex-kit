@@ -40,10 +40,12 @@ Required workflow:
 3. Do not skip Graphify because \`graphify-out/\` is dirty or has uncommitted changes. Graphify output is generated state and may normally change during work.
 4. Use raw search only after Graphify narrows the likely modules, files, symbols, or concepts.
 5. After significant code changes, refresh the graph from the repo root:
-   \`graphify . --update\`
-6. Inside Codex, use \`$graphify .\` when an explicit Graphify build or rebuild is needed. In a terminal, use \`graphify .\`.
+   \`graphify update .\`
+6. Inside Codex, use \`$graphify .\` when an explicit Graphify build or rebuild is needed. In a terminal, \`graphify update .\` builds or refreshes the code graph without an API key.
+7. Whenever a task includes Git commits, review and commit the relevant \`graphify-out/\` changes with the code changes that produced them. Never stage \`graphify-out/cost.json\`, dated backup directories, or unrelated pre-existing Graphify changes.
+8. After each code commit, run \`graphify update .\` again to reconcile any detached post-commit rebuild, then re-check \`git status\`. If it creates a relevant tracked Graphify delta, commit that delta in a Graphify-only follow-up before pushing or handing off.
 
-If Graphify is missing, broken, or \`graphify-out/graph.json\` does not exist, state that clearly, then fall back to normal repository exploration.
+If \`graphify-out/graph.json\` does not exist, build it before falling back. Only fall back to normal repository exploration when Graphify is unavailable or the build fails.
 ${POLICY_END}
 `;
 
@@ -441,20 +443,22 @@ function installCodexIntegration(runner, options) {
 
 function buildGraph(runner, options) {
   if (options.skipBuild) return "skipped";
-  const graphExists = fs.existsSync(path.join(options.repoRoot, "graphify-out", "graph.json"));
-  const args = graphExists ? [".", "--update"] : ["."];
-  const result = tryRun(runner.command, graphifyArgs(runner, args), options);
+  const result = tryRun(runner.command, graphifyArgs(runner, ["update", "."]), options);
+  if (options.dryRun) return "planned";
+  const graph = path.join(options.repoRoot, "graphify-out", "graph.json");
+  const report = path.join(options.repoRoot, "graphify-out", "GRAPH_REPORT.md");
+  const missing = [graph, report].filter((artifact) => !fs.existsSync(artifact));
+  if (missing.length) {
+    throw new Error(`Graph build/update did not produce required artifacts: ${missing.map((artifact) => path.relative(options.repoRoot, artifact)).join(", ")}.`);
+  }
   if (!result.ok) {
-    const message = "Graph build/update failed. This often means Graphify needs a model, backend, or API configuration.";
+    const message = "Graph build/update failed; preserving the existing verified graph artifacts.";
     if (options.strictBuild) throw new Error(message);
     log("warn", `${message} Continuing because --strict-build was not set.`);
     return "failed";
   }
-  if (options.dryRun) return "planned";
-  const graph = path.join(options.repoRoot, "graphify-out", "graph.json");
-  const report = path.join(options.repoRoot, "graphify-out", "GRAPH_REPORT.md");
-  log(fs.existsSync(graph) ? "ok" : "warn", `${fs.existsSync(graph) ? "Confirmed" : "Did not find"}: graphify-out/graph.json`);
-  log(fs.existsSync(report) ? "ok" : "warn", `${fs.existsSync(report) ? "Confirmed" : "Did not find"}: graphify-out/GRAPH_REPORT.md`);
+  log("ok", "Confirmed: graphify-out/graph.json");
+  log("ok", "Confirmed: graphify-out/GRAPH_REPORT.md");
   return "succeeded";
 }
 
