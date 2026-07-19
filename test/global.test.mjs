@@ -26,9 +26,18 @@ test('personal setup installs the global brain skill and optional native memorie
   const result = await applyGlobal(await globalPlan({ home, preset: 'personal', memories: true }));
   assert.equal(result.status, 'ok');
   assert.match(await readFile(join(home, 'AGENTS.md'), 'utf8'), /# Human global rules/);
-  assert.match(await readFile(join(home, 'AGENTS.md'), 'utf8'), /obsidian-brain/);
+  const agents = await readFile(join(home, 'AGENTS.md'), 'utf8');
+  assert.match(agents, /obsidian-brain/);
+  assert.match(agents, /narrowly approved desktop\/Obsidian CLI access/);
+  assert.match(agents, /Before the final response on every validated non-trivial task/);
+  assert.match(agents, /remembered: true/);
   assert.match(await readFile(join(home, 'config.toml'), 'utf8'), /memories = true/);
-  assert.match(await readFile(join(home, 'skills', 'obsidian-project-brain', 'SKILL.md'), 'utf8'), /name: obsidian-project-brain/);
+  const skill = await readFile(join(home, 'skills', 'obsidian-project-brain', 'SKILL.md'), 'utf8');
+  assert.match(skill, /name: obsidian-project-brain/);
+  assert.match(skill, /narrowly approved desktop\/Obsidian CLI access/);
+  assert.match(skill, /Before the final response on every validated non-trivial task/);
+  assert.match(skill, /A preview is not a capture/);
+  assert.match(skill, /remembered: true/);
 });
 
 test('global brain setup preserves a colliding user-owned skill', async () => {

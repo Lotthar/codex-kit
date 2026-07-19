@@ -1,4 +1,4 @@
 interface:
   display_name: "Obsidian Project Brain"
   short_description: "Recall and curate durable project knowledge"
-  default_prompt: "Use $obsidian-project-brain to recall verified project context before planning and capture durable lessons after validation."
+  default_prompt: "Use $obsidian-project-brain to recall relevant context before non-trivial work and make the required post-validation capture decision before final handoff."

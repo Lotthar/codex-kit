@@ -25,6 +25,8 @@ The `personal` preset makes a dedicated Obsidian vault the durable, human-readab
 
 The official [Obsidian CLI documentation](https://obsidian.md/help/cli) is authoritative. The desktop app must be running; the first CLI call can launch it. On Linux, ensure `~/.local/bin` is on `PATH`. On macOS, registration may request administrator approval for `/usr/local/bin/obsidian`. On Windows, use the 1.12.7+ installer and restart the terminal so its redirector is on `PATH`. Treat WSL as a separate Linux environment and verify the `obsidian` command there; a command registered only in Windows is not automatically available to Linux-side Codex.
 
+When Codex runs commands in a sandbox, an `EPERM` or `EACCES` result can mean that the sandbox cannot reach Obsidian's local CLI socket even though the app is installed and running. Retry the same `codex-kit brain ...` command with narrowly approved desktop/Obsidian CLI access; do not reinstall or reconfigure Obsidian for that error.
+
 ### 2. Configure Codex once per device
 
 Run this from any Git project:
@@ -61,7 +63,9 @@ Projects/<projectKey>/
 
 ### Normal use: no recurring setup command
 
-Open Codex in the configured project and work normally. The managed policy tells agents to retrieve a small, relevant context packet before substantial work and lets the parent agent capture durable knowledge only after validation. Repository code, tests, and `AGENTS.md` remain authoritative; recalled notes are labelled as untrusted supporting context.
+Open Codex in the configured project and work normally. The managed policy tells agents to retrieve a small, relevant context packet before substantial work and requires the parent agent to make a capture decision after validation and before final handoff. Durable decisions, recurring verified lessons, reusable runbooks, and unresolved cross-task questions are previewed, appended, and verified; routine work is explicitly skipped. Repository code, tests, and `AGENTS.md` remain authoritative; recalled notes are labelled as untrusted supporting context.
+
+Project Brain remains curated and event-driven, not a background watcher. Subagents can propose concise Brain candidates, but only the parent writes a focused note and only when the validated result will help future work.
 
 Recall is intentionally bounded to `Home.md` plus at most five relevant notes, no more than 2 KiB per note and 8 KiB overall. Default recall stays inside the current project. Cross-project recall must be explicitly requested.
 
@@ -184,7 +188,7 @@ The developer preset installs the core skills below under `.agents/skills/`; the
 | `$ruflo-orchestration` | Durable Ruflo coordination only when its threshold is met |
 | `$prompt-enhancer` | Convert rough requests into focused, repo-aware Codex tasks |
 | `$continuous-clean-code-refactor` | Requested maintainability and technical-debt cleanup |
-| `$obsidian-project-brain` | Bounded project recall and parent-only post-validation capture for the personal preset |
+| `$obsidian-project-brain` | Bounded project recall plus a required parent closeout decision for durable post-validation capture |
 
 Delegation remains proportional: trivial and small targeted changes run directly; non-trivial planning, implementation, and debugging skills use one level of focused subagents with the main task owning decisions and integration.
 

@@ -161,6 +161,20 @@ test('requires official Obsidian CLI 1.12.7 before every vault operation', async
   }
 });
 
+test('explains when the execution environment blocks the Obsidian CLI', async () => {
+  const home = await configuredHome();
+  for (const failure of [
+    { stderr: 'CLI unavailable', error: 'spawnSync obsidian EPERM' },
+    { stderr: 'Error: connect EACCES /run/user/1000/.obsidian-cli.sock' },
+  ]) {
+    const result = await brainStatus({ home, projectKey: PROJECT, runner: async () => ({ status: 1, ...failure }) });
+    assert.equal(result.status, 'partial');
+    assert.match(JSON.stringify(result.actions), /current execution environment/);
+    assert.match(JSON.stringify(result.actions), /approved desktop\/Obsidian CLI access/);
+    assert.match(JSON.stringify(result.actions), new RegExp(failure.stderr));
+  }
+});
+
 test('rejects application Error output from version even after warnings', async () => {
   const home = await configuredHome();
   const calls = [];

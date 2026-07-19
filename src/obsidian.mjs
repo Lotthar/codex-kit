@@ -97,9 +97,13 @@ async function call(runner, args, { vault, cwd, timeout = 30_000 } = {}) {
 }
 
 function failureDetail(result, redact = []) {
-  let detail = result.error || result.stderr.trim() || 'Obsidian CLI command failed.';
+  let detail = result.stderr.trim() || result.error || 'Obsidian CLI command failed.';
   for (const value of redact.filter(Boolean)) detail = detail.split(value).join('[configured vault]');
   return byteTruncate(detail, 512);
+}
+
+function sandboxDenied(result) {
+  return /\b(?:EPERM|EACCES)\b/i.test(`${result.error}\n${result.stderr}`);
 }
 
 function parsedCliVersion(output) {
@@ -117,7 +121,11 @@ function atLeast(version, minimum) {
 
 async function supportedCli(runner) {
   const result = await call(runner, ['version']);
-  if (result.status !== 0) return { ok: false, detail: `Obsidian 1.12.7+ with the official CLI enabled is required. ${failureDetail(result)}` };
+  if (result.status !== 0) {
+    const detail = failureDetail(result);
+    if (sandboxDenied(result)) return { ok: false, detail: `Obsidian CLI access was denied by the current execution environment. Retry this Codex Kit brain command with narrowly approved desktop/Obsidian CLI access. ${detail}` };
+    return { ok: false, detail: `Obsidian 1.12.7+ with the official CLI enabled is required. ${detail}` };
+  }
   const version = parsedCliVersion(`${result.stdout}\n${result.stderr}`);
   if (!version) return { ok: false, detail: 'Could not verify the Obsidian CLI version. Install Obsidian 1.12.7+ and enable Command line interface in Settings → General.' };
   if (!atLeast(version, MIN_CLI_VERSION)) return { ok: false, detail: `Obsidian CLI ${version.join('.')} is unsupported. Install Obsidian 1.12.7 or newer.` };

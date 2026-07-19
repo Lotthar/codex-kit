@@ -115,7 +115,9 @@ test('personal preset provisions a portable Obsidian brain key and skill', async
   assert.match(preview.config.tools.obsidian.projectKey, /^portable-brain-[a-f0-9]{10}$/);
   const applied = await applyProject(preview);
   assert.equal(applied.status, 'ok');
-  assert.equal((await import('node:fs')).existsSync(join(root, '.agents', 'skills', 'obsidian-project-brain', 'SKILL.md')), true);
+  const skill = await readFile(join(root, '.agents', 'skills', 'obsidian-project-brain', 'SKILL.md'), 'utf8');
+  assert.match(skill, /Before the final response on every validated non-trivial task/);
+  assert.match(skill, /remembered: true/);
   const refreshed = await projectPlan({ root, preset: 'developer' });
   assert.equal(refreshed.config.tools.obsidian.projectKey, preview.config.tools.obsidian.projectKey);
 });
