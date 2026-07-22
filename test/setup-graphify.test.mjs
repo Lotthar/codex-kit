@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -28,7 +28,14 @@ if (args[0] === 'update') {
 }
 `);
   if (process.platform === 'win32') {
-    await writeFile(join(bin, 'graphify.cmd'), '@echo off\r\nnode "%~dp0graphify.mjs" %*\r\n');
+    await copyFile(process.execPath, join(bin, 'graphify.exe'));
+    await writeFile(join(root, 'update'), `const fs = require('node:fs');
+const args = ['update', ...process.argv.slice(2)];
+fs.appendFileSync(process.env.FAKE_GRAPHIFY_LOG, JSON.stringify(args) + '\\n');
+fs.mkdirSync('graphify-out', { recursive: true });
+fs.writeFileSync('graphify-out/graph.json', '{}\\n');
+if (process.env.FAKE_GRAPHIFY_COMPLETE === '1') fs.writeFileSync('graphify-out/GRAPH_REPORT.md', '# Graph\\n');
+`);
   } else {
     const executable = join(bin, 'graphify');
     await writeFile(executable, '#!/bin/sh\nexec node "$(dirname "$0")/graphify.mjs" "$@"\n');
