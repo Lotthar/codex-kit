@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import {
   brainAudit,
   brainConfigPath,
   brainConfigure,
   brainInit,
+  brainMigrate,
   brainRecall,
   brainRemember,
   brainStatus,
@@ -42,8 +43,24 @@ function fakeObsidian(initial = {}) {
     if (operation === 'read') return notes.has(param('path')) ? { status: 0, stdout: notes.get(param('path')) } : { status: 1, stderr: 'File not found' };
     if (operation === 'create') {
       const path = param('path');
-      if (notes.has(path)) return { status: 1, stderr: 'File already exists' };
+      if (notes.has(path) && !commandArgs.includes('overwrite')) return { status: 1, stderr: 'File already exists' };
       notes.set(path, param('content'));
+      return { status: 0, stdout: path };
+    }
+    if (operation === 'move') {
+      const source = param('path');
+      const requestedDestination = param('to');
+      const destination = requestedDestination.endsWith('.md') ? requestedDestination : `${requestedDestination}/${basename(source)}`;
+      if (!notes.has(source)) return { status: 1, stderr: 'File not found' };
+      if (notes.has(destination)) return { status: 1, stderr: 'Destination already exists' };
+      notes.set(destination, notes.get(source));
+      notes.delete(source);
+      return { status: 0, stdout: destination };
+    }
+    if (operation === 'delete') {
+      const path = param('path');
+      if (!notes.has(path)) return { status: 1, stderr: 'File not found' };
+      notes.delete(path);
       return { status: 0, stdout: path };
     }
     if (operation === 'search') {
@@ -120,6 +137,74 @@ test('initializes through argument-array CLI calls and is idempotent', async () 
   assert.equal((await brainInit({ home, projectKey: PROJECT, runner: fake.runner, execute: true })).actions[0].state, 'unchanged');
   assert.equal(fake.calls.every((item) => item.command === 'obsidian' && Array.isArray(item.args)), true);
   assert.equal(fake.calls.filter((item) => item.args.includes('create')).every((item) => item.args[0] === 'vault=Codex Brain'), true);
+});
+
+test('migrates a project brain with native moves and updated project metadata', async () => {
+  const home = await configuredHome();
+  const oldProject = 'old-reader-1234567890';
+  const newProject = 'new-reader-1234567890';
+  const oldHome = `Projects/${oldProject}/Home.md`;
+  const oldRunbook = `Projects/${oldProject}/Runbooks/runbook.md`;
+  const fake = fakeObsidian({
+    [oldHome]: memory({ project: oldProject, kind: 'home', key: 'home', body: `Home for ${oldProject}` }),
+    [oldRunbook]: memory({ project: oldProject, kind: 'runbook', key: 'runbook-1234567890abc', body: `Continue ${oldProject}` }),
+  });
+  const preview = await brainMigrate({ home, fromProjectKey: oldProject, toProjectKey: newProject, runner: fake.runner });
+  assert.equal(preview.migrated, false);
+  assert.equal(preview.noteCount, 2);
+  const result = await brainMigrate({ home, fromProjectKey: oldProject, toProjectKey: newProject, execute: true, runner: fake.runner });
+  assert.equal(result.status, 'ok');
+  assert.equal(result.migrated, true);
+  assert.equal(fake.notes.has(oldHome), false);
+  assert.match(fake.notes.get(`Projects/${newProject}/Home.md`), new RegExp(`project: \"${newProject}\"`));
+  assert.doesNotMatch(fake.notes.get(`Projects/${newProject}/Runbooks/runbook.md`), new RegExp(oldProject));
+  const moves = fake.calls.filter(({ args }) => args.includes('move')).map(({ args }) => args);
+  assert.equal(moves.some((args) => args.includes(`to=Projects/${newProject}`)), true);
+  assert.equal(moves.some((args) => args.includes(`to=Projects/${newProject}/Runbooks`)), true);
+});
+
+test('accepts a marker deletion when Obsidian reports it missing immediately afterward', async () => {
+  const home = await configuredHome();
+  const oldProject = 'old-reader-1234567890';
+  const newProject = 'new-reader-1234567890';
+  const fake = fakeObsidian({
+    [`Projects/${oldProject}/Home.md`]: memory({ project: oldProject, kind: 'home', key: 'home' }),
+    [`Projects/${oldProject}/Runbooks/runbook.md`]: memory({ project: oldProject, kind: 'runbook', key: 'runbook-1234567890abc' }),
+  });
+  const runner = async (command, args, options) => {
+    if (args.includes('delete')) {
+      await fake.runner(command, args, options);
+      return { status: 1, stderr: 'File not found' };
+    }
+    return fake.runner(command, args, options);
+  };
+  const result = await brainMigrate({ home, fromProjectKey: oldProject, toProjectKey: newProject, execute: true, runner });
+  assert.equal(result.status, 'ok');
+  assert.equal(result.migrated, true);
+});
+
+test('rolls back moved notes when a project-brain migration cannot update a note', async () => {
+  const home = await configuredHome();
+  const oldProject = 'old-reader-1234567890';
+  const newProject = 'new-reader-1234567890';
+  const oldHome = `Projects/${oldProject}/Home.md`;
+  const oldRunbook = `Projects/${oldProject}/Runbooks/runbook.md`;
+  const fake = fakeObsidian({
+    [oldHome]: memory({ project: oldProject, kind: 'home', key: 'home' }),
+    [oldRunbook]: memory({ project: oldProject, kind: 'runbook', key: 'runbook-1234567890abc' }),
+  });
+  const runner = async (command, args, options) => {
+    if (args.includes('create') && args.includes(`path=Projects/${newProject}/Runbooks/runbook.md`)) return { status: 1, stderr: 'write failed' };
+    return fake.runner(command, args, options);
+  };
+  const result = await brainMigrate({ home, fromProjectKey: oldProject, toProjectKey: newProject, execute: true, runner });
+  assert.equal(result.status, 'partial');
+  assert.equal(fake.notes.has(oldHome), true);
+  assert.equal(fake.notes.has(oldRunbook), true);
+  assert.equal(fake.notes.has(`Projects/${newProject}/Home.md`), false);
+  const moves = fake.calls.filter(({ args }) => args.includes('move')).map(({ args }) => args);
+  assert.equal(moves.some((args) => args.includes(`to=Projects/${oldProject}`)), true);
+  assert.equal(moves.some((args) => args.includes(`to=Projects/${oldProject}/Runbooks`)), true);
 });
 
 test('treats official CLI Error output as failure even when the process exits zero', async () => {

@@ -522,3 +522,133 @@ export async function brainAudit({ home, root, projectKey, crossProject = false,
     actions: [action(errorCount ? 'failed' : findings.length ? 'recommended' : 'unchanged', 'audit Obsidian project brain', `${paths.length} notes; ${findings.length} findings`)],
   };
 }
+
+function migrationReceipt({ status, fromProjectKey, toProjectKey, entries = [], actions, migrated = false }) {
+  return {
+    status,
+    migrated,
+    fromProjectKey,
+    toProjectKey,
+    noteCount: entries.length,
+    notes: entries.map(({ source, destination }) => ({ from: source, to: destination })),
+    actions,
+  };
+}
+
+async function brainMigrationPlan({ home, fromProjectKey, toProjectKey, runner }) {
+  validateProjectKey(fromProjectKey);
+  validateProjectKey(toProjectKey);
+  if (fromProjectKey === toProjectKey) throw new Error('The source and destination Obsidian project keys must differ.');
+  const state = await configurationState(home);
+  if (!state.config) return migrationReceipt({ status: 'partial', fromProjectKey, toProjectKey, actions: [action('recommended', 'configure Obsidian vault', state.error)] });
+  const cli = await supportedCli(runner);
+  if (!cli.ok) return migrationReceipt({ status: 'partial', fromProjectKey, toProjectKey, actions: [action('failed', 'use supported Obsidian CLI', cli.detail)] });
+  const sourceScope = projectPath(fromProjectKey);
+  const targetScope = projectPath(toProjectKey);
+  const [sourceFiles, targetFiles] = await Promise.all([
+    call(runner, ['files', `folder=${sourceScope}`, 'ext=md'], { vault: state.config.vault }),
+    call(runner, ['files', `folder=${targetScope}`, 'ext=md'], { vault: state.config.vault }),
+  ]);
+  if (sourceFiles.status !== 0) return migrationReceipt({ status: 'partial', fromProjectKey, toProjectKey, actions: [action('failed', 'list source Obsidian project brain', failureDetail(sourceFiles, [state.config.vault]))] });
+  if (targetFiles.status !== 0) return migrationReceipt({ status: 'partial', fromProjectKey, toProjectKey, actions: [action('failed', 'list destination Obsidian project brain', failureDetail(targetFiles, [state.config.vault]))] });
+  const sourcePaths = fileList(sourceFiles.stdout).filter((path) => safeVaultPath(path, sourceScope));
+  const existingTargets = fileList(targetFiles.stdout).filter((path) => safeVaultPath(path, targetScope));
+  if (!sourcePaths.includes(homePath(fromProjectKey))) return migrationReceipt({ status: 'partial', fromProjectKey, toProjectKey, actions: [action('failed', 'migrate Obsidian project brain', 'The source project home note is missing.')] });
+  if (sourcePaths.length > MAX_AUDIT_FILES || Buffer.byteLength(sourceFiles.stdout) > MAX_SEARCH_OUTPUT_BYTES) return migrationReceipt({ status: 'partial', fromProjectKey, toProjectKey, actions: [action('failed', 'migrate Obsidian project brain', 'The source project exceeds the safe migration size limit.')] });
+  if (existingTargets.length) return migrationReceipt({ status: 'partial', fromProjectKey, toProjectKey, actions: [action('failed', 'migrate Obsidian project brain', 'The destination project key already contains notes.')] });
+  const entries = [];
+  let bytes = 0;
+  for (const source of sourcePaths) {
+    const read = await call(runner, ['read', `path=${source}`], { vault: state.config.vault });
+    if (read.status !== 0) return migrationReceipt({ status: 'partial', fromProjectKey, toProjectKey, entries, actions: [action('failed', 'read Obsidian project memory', source)] });
+    bytes += Buffer.byteLength(read.stdout);
+    if (bytes > MAX_AUDIT_BYTES || Buffer.byteLength(read.stdout) > MAX_NOTE_BYTES) return migrationReceipt({ status: 'partial', fromProjectKey, toProjectKey, entries, actions: [action('failed', 'migrate Obsidian project brain', 'A source note exceeds the safe migration size limit.')] });
+    if (frontmatter(read.stdout).project !== fromProjectKey) return migrationReceipt({ status: 'partial', fromProjectKey, toProjectKey, entries, actions: [action('failed', 'migrate Obsidian project brain', `Source note has a mismatched project key: ${source}`)] });
+    const destination = `${targetScope}/${relative(sourceScope, source)}`;
+    if (!safeVaultPath(destination, targetScope)) throw new Error(`Unsafe Obsidian migration destination: ${destination}`);
+    entries.push({ source, destination, content: read.stdout, migratedContent: read.stdout.split(fromProjectKey).join(toProjectKey) });
+  }
+  return { status: 'ok', fromProjectKey, toProjectKey, config: state.config, entries };
+}
+
+async function rollbackBrainMigration(entries, config, runner) {
+  const failures = [];
+  for (const entry of [...entries].reverse()) {
+    const moved = await call(runner, ['move', `path=${entry.destination}`, `to=${dirname(entry.source)}`], { vault: config.vault });
+    if (moved.status !== 0) { failures.push(entry.destination); continue; }
+    const restored = await call(runner, ['create', `path=${entry.source}`, `content=${entry.content}`, 'overwrite'], { vault: config.vault });
+    if (restored.status !== 0) failures.push(entry.source);
+  }
+  return failures;
+}
+
+async function createMigrationMarkers(entries, config, runner) {
+  const markers = [...new Set(entries.map(({ destination }) => `${dirname(destination)}/codex-kit-migration-marker.md`))];
+  const created = [];
+  for (const marker of markers) {
+    const result = await call(runner, ['create', `path=${marker}`, 'content=Temporary Codex Kit migration marker.'], { vault: config.vault });
+    if (result.status === 0) { created.push(marker); continue; }
+    await removeMigrationMarkers(created, config, runner);
+    throw new Error(`Obsidian could not prepare ${dirname(marker)}`);
+  }
+  return markers;
+}
+
+async function removeMigrationMarkers(markers, config, runner) {
+  const failures = [];
+  for (const marker of markers) {
+    const result = await call(runner, ['delete', `path=${marker}`], { vault: config.vault });
+    if (result.status === 0) continue;
+    const read = await call(runner, ['read', `path=${marker}`], { vault: config.vault });
+    if (read.status === 0 || !/not found/i.test(`${read.stdout}\n${read.stderr}\n${read.error}`)) failures.push(marker);
+  }
+  return failures;
+}
+
+async function verifyBrainMigration(entries, config, fromProjectKey, toProjectKey, runner) {
+  const sourceScope = projectPath(fromProjectKey);
+  const targetScope = projectPath(toProjectKey);
+  const [sourceFiles, targetFiles] = await Promise.all([
+    call(runner, ['files', `folder=${sourceScope}`, 'ext=md'], { vault: config.vault }),
+    call(runner, ['files', `folder=${targetScope}`, 'ext=md'], { vault: config.vault }),
+  ]);
+  if (sourceFiles.status !== 0 || targetFiles.status !== 0) return 'Obsidian could not verify the migration file lists.';
+  const sources = fileList(sourceFiles.stdout).filter((path) => safeVaultPath(path, sourceScope));
+  const targets = new Set(fileList(targetFiles.stdout).filter((path) => safeVaultPath(path, targetScope)));
+  if (sources.length || targets.size !== entries.length) return 'The source or destination note counts do not match the migration plan.';
+  for (const entry of entries) {
+    if (!targets.has(entry.destination)) return `Missing migrated note: ${entry.destination}`;
+    const read = await call(runner, ['read', `path=${entry.destination}`], { vault: config.vault });
+    if (read.status !== 0 || frontmatter(read.stdout).project !== toProjectKey || read.stdout.includes(fromProjectKey)) return `Migrated note did not verify: ${entry.destination}`;
+  }
+  return '';
+}
+
+export async function brainMigrate({ home, fromProjectKey, toProjectKey, execute = false, runner = run }) {
+  const plan = await brainMigrationPlan({ home, fromProjectKey, toProjectKey, runner });
+  if (plan.status !== 'ok') return plan;
+  if (!execute) return migrationReceipt({ status: 'ok', fromProjectKey, toProjectKey, entries: plan.entries, actions: [action('planned', 'migrate Obsidian project brain', `${plan.entries.length} notes with native Obsidian moves`)] });
+  const moved = [];
+  let markers = [];
+  try {
+    markers = await createMigrationMarkers(plan.entries, plan.config, runner);
+    for (const entry of plan.entries) {
+      const move = await call(runner, ['move', `path=${entry.source}`, `to=${dirname(entry.destination)}`], { vault: plan.config.vault });
+      if (move.status !== 0) throw new Error(`Obsidian could not move ${entry.source}`);
+      moved.push(entry);
+      const update = await call(runner, ['create', `path=${entry.destination}`, `content=${entry.migratedContent}`, 'overwrite'], { vault: plan.config.vault });
+      if (update.status !== 0) throw new Error(`Obsidian could not update ${entry.destination}`);
+    }
+    markers = await removeMigrationMarkers(markers, plan.config, runner);
+    if (markers.length) throw new Error('Obsidian could not remove temporary migration markers.');
+    const verification = await verifyBrainMigration(plan.entries, plan.config, fromProjectKey, toProjectKey, runner);
+    if (verification) throw new Error(verification);
+    return migrationReceipt({ status: 'ok', migrated: true, fromProjectKey, toProjectKey, entries: plan.entries, actions: [action('changed', 'migrate Obsidian project brain', `${plan.entries.length} notes moved and verified`)] });
+  } catch (error) {
+    const failures = await rollbackBrainMigration(moved, plan.config, runner);
+    const markerFailures = await removeMigrationMarkers(markers, plan.config, runner);
+    const rollbackFailures = failures.length + markerFailures.length;
+    const rollback = rollbackFailures ? action('failed', 'rollback Obsidian project brain migration', `${rollbackFailures} temporary items require manual recovery`) : action('changed', 'rollback Obsidian project brain migration', 'source notes restored');
+    return migrationReceipt({ status: 'partial', fromProjectKey, toProjectKey, entries: plan.entries, actions: [action('failed', 'migrate Obsidian project brain', byteTruncate(error.message, 512)), rollback] });
+  }
+}

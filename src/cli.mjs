@@ -1,4 +1,5 @@
 import { parseArgs } from 'node:util';
+import { join } from 'node:path';
 import { isatty } from 'node:tty';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
@@ -8,7 +9,7 @@ import { applyProject, doctor, findProjectRoot, initProject, modifyProject, proj
 import { enrich, sanitizedInventory } from './enrichment.mjs';
 import { importSkill } from './skills.mjs';
 import { listTransactions } from './transaction.mjs';
-import { brainAudit, brainConfigure, brainInit, brainRecall, brainRemember, brainStatus } from './obsidian.mjs';
+import { brainAudit, brainConfigure, brainInit, brainMigrate, brainRecall, brainRemember, brainStatus } from './obsidian.mjs';
 
 const help = `Codex Kit — reproducible Codex setup
 
@@ -18,6 +19,7 @@ Usage:
   codex-kit models status|refresh [--home PATH] [--yes]
   codex-kit brain configure --vault NAME [--home PATH] [--yes]
   codex-kit brain init|status|audit [--root PATH]
+  codex-kit brain migrate --to PROJECT_KEY [--root PATH] [--yes]
   codex-kit brain recall --query TEXT [--cross-project] [--root PATH]
   codex-kit brain remember --kind KIND --title TEXT --summary TEXT [--details TEXT] [--source REF] [--supersedes KEY] [--yes]
   codex-kit project init|plan|apply|refresh|status [--root PATH]
@@ -34,7 +36,7 @@ Usage:
 Mutations preview by default. --yes applies; --dry-run always previews; --json never prompts.`;
 
 const optionSpec = {
-  yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, json: { type: 'boolean' }, help: { type: 'boolean' }, check: { type: 'boolean' }, 'include-content': { type: 'boolean' }, 'allow-network': { type: 'boolean' }, 'model-routing': { type: 'boolean' }, memories: { type: 'boolean' }, obsidian: { type: 'boolean' }, 'cross-project': { type: 'boolean' }, enrich: { type: 'boolean' }, global: { type: 'boolean' }, preset: { type: 'string' }, home: { type: 'string' }, root: { type: 'string' }, source: { type: 'string' }, output: { type: 'string' }, transaction: { type: 'string' }, value: { type: 'string' }, vault: { type: 'string' }, query: { type: 'string' }, kind: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' }, details: { type: 'string' }, supersedes: { type: 'string' }
+  yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, json: { type: 'boolean' }, help: { type: 'boolean' }, check: { type: 'boolean' }, 'include-content': { type: 'boolean' }, 'allow-network': { type: 'boolean' }, 'model-routing': { type: 'boolean' }, memories: { type: 'boolean' }, obsidian: { type: 'boolean' }, 'cross-project': { type: 'boolean' }, enrich: { type: 'boolean' }, global: { type: 'boolean' }, preset: { type: 'string' }, home: { type: 'string' }, root: { type: 'string' }, source: { type: 'string' }, output: { type: 'string' }, transaction: { type: 'string' }, value: { type: 'string' }, vault: { type: 'string' }, query: { type: 'string' }, kind: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' }, details: { type: 'string' }, supersedes: { type: 'string' }, to: { type: 'string' }
 };
 
 const execute = (values) => Boolean(values.yes) && !values['dry-run'];
@@ -127,11 +129,12 @@ export async function main(argv = process.argv.slice(2)) {
     } else if (command === 'brain' && subcommand === 'configure') {
       if (!values.vault) throw new Error('Use: codex-kit brain configure --vault NAME --yes');
       result = await brainConfigure({ home: values.home || codexHome(), vault: values.vault, execute: shouldApply });
-    } else if (command === 'brain' && ['init', 'status', 'recall', 'remember', 'audit'].includes(subcommand)) {
+    } else if (command === 'brain' && ['init', 'status', 'recall', 'remember', 'audit', 'migrate'].includes(subcommand)) {
       let root;
       let projectKey;
+      let project;
       try {
-        const project = await projectStatus(values.root || process.cwd());
+        project = await projectStatus(values.root || process.cwd());
         root = project.root;
         projectKey = project.config?.tools?.obsidian?.projectKey;
       } catch (error) {
@@ -140,6 +143,30 @@ export async function main(argv = process.argv.slice(2)) {
       if (subcommand !== 'status' && !projectKey) result = { status: 'partial', actions: [action('recommended', 'initialize project Obsidian configuration', 'codex-kit project init --preset personal --yes')] };
       else if (subcommand === 'init') result = await brainInit({ home: values.home || codexHome(), projectKey, execute: shouldApply });
       else if (subcommand === 'status') result = await brainStatus({ home: values.home || codexHome(), projectKey });
+      else if (subcommand === 'migrate') {
+        if (!values.to) throw new Error('Use: codex-kit brain migrate --to PROJECT_KEY [--yes]');
+        const preview = await brainMigrate({ home: values.home || codexHome(), fromProjectKey: projectKey, toProjectKey: values.to });
+        if (!shouldApply || preview.status !== 'ok') result = preview;
+        else {
+          const configPath = join(root, '.codex-kit', 'config.json');
+          const originalConfig = `${JSON.stringify(project.config, null, 2)}\n`;
+          const updatedConfig = structuredClone(project.config);
+          updatedConfig.tools ??= {};
+          updatedConfig.tools.obsidian ??= {};
+          updatedConfig.tools.obsidian.projectKey = values.to;
+          await atomicWrite(configPath, `${JSON.stringify(updatedConfig, null, 2)}\n`);
+          try {
+            result = await brainMigrate({ home: values.home || codexHome(), fromProjectKey: projectKey, toProjectKey: values.to, execute: true });
+            if (result.status !== 'ok') {
+              await atomicWrite(configPath, originalConfig);
+              result = { ...result, actions: [...result.actions, action('changed', 'restore local Obsidian project key', 'source project key restored')] };
+            }
+          } catch (error) {
+            await atomicWrite(configPath, originalConfig);
+            throw error;
+          }
+        }
+      }
       else if (subcommand === 'recall') result = await brainRecall({ home: values.home || codexHome(), root, projectKey, query: values.query, crossProject: values['cross-project'] });
       else if (subcommand === 'remember') result = await brainRemember({ home: values.home || codexHome(), root, projectKey, kind: values.kind, title: values.title, summary: values.summary, details: values.details, source: values.source, supersedes: values.supersedes, execute: shouldApply });
       else result = await brainAudit({ home: values.home || codexHome(), root, projectKey, crossProject: values['cross-project'] });
