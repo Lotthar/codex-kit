@@ -1,90 +1,20 @@
 # Quarkus profile
 
-Apply this profile after the generic and Java profiles. Preserve the detected Quarkus platform, REST stack, persistence choice, build mode, and deployment target.
+Apply after generic and Java profiles. Preserve the detected Quarkus platform, REST/persistence stack, build mode, and deployment target.
 
-## Discover the application
+## Discovery and build behavior
 
-- Read the Quarkus BOM/plugin configuration, application config, extensions, and wrapper scripts.
-- Identify Quarkus REST versus legacy RESTEasy, imperative versus reactive paths, Hibernate ORM versus Reactive, and messaging extensions.
-- Inspect CDI scopes, qualifiers, interceptors, config mappings, test profiles, Dev Services, and native-image configuration.
-- Find resource, service, repository, client, event, and transaction boundaries related to the task.
-- Preserve package and module boundaries from the Java profile.
-- Do not add an extension until existing platform or JDK capabilities have been checked.
+- Read the Quarkus BOM/plugin, config, extensions, wrappers, CDI scopes/qualifiers/interceptors, config mappings, test profiles, Dev Services, and native-image config. Identify REST versus RESTEasy, imperative/reactive paths, ORM/reactive persistence, messaging, and task-relevant resource/service/repository/client boundaries. Do not add extensions until existing platform/JDK capabilities are checked.
+- Quarkus configures and augments at build time: treat extension, indexing, reflection, proxy, resource, and native changes as build-impacting. Preserve dev/test/production differences, leave generated and build output untouched, verify JVM packaging before native unless native-only, and add native metadata only for a demonstrated failure.
 
-## Build-time and runtime behavior
+## CDI, HTTP, persistence, security
 
-- Remember that Quarkus resolves substantial configuration and augmentation at build time.
-- Treat extension, indexing, reflection, proxy, and native resource changes as build-impacting.
-- Do not use runtime classpath scanning assumptions without verifying Quarkus support.
-- Keep generated sources and `target/` or `build/` output untouched.
-- Preserve dev, test, and production configuration differences.
-- Verify JVM packaging before native mode unless the task is specifically native-only.
-- Add native reflection or resource metadata only for a demonstrated native failure.
+- Keep REST resources/message consumers thin; put use cases in cohesive CDI/domain services. Use the local injection style, deliberate scopes, qualifiers only for real alternatives, and policy-boundary interceptors. Do not depend on proxy/self-invocation behavior or write a delegating bean wrapper.
+- Validate HTTP input; preserve method/path/media/status/error contracts; use exception mappers without internal leakage; never block reactive event-loop endpoints; preserve reactive cancellation/failure semantics; maintain DTO/entity separation and trusted authorization boundaries.
+- Use MicroProfile Config or existing typed mappings, preserve source precedence and deployment overrides, keep secrets out of config/logs, and treat HTTP/TLS/CORS/OIDC/datasource/management settings as security-sensitive.
+- Place `@Transactional` at consistency boundaries, understand rollback, avoid remote calls inside transactions when possible, bound queries/lazy state, and keep schema generation/migrations environment-safe. Preserve messaging retry, acknowledgement, ordering, backpressure, idempotency, and safe multi-instance schedules. Keep OIDC issuer/audience/TLS/token rules and least privilege intact.
 
-## CDI and architecture
-
-- Keep REST resources and message consumers thin.
-- Put use-case behavior in cohesive CDI beans or domain services following local structure.
-- Use constructor injection or the repository's established CDI injection style consistently.
-- Select bean scopes intentionally; avoid accidental application-wide mutable state.
-- Use qualifiers when multiple implementations are real, not speculative.
-- Keep interceptor annotations at meaningful policy boundaries such as transactions or security.
-- Avoid depending on implementation-specific proxies or self-invocation behavior.
-- Do not create a bean wrapper that only delegates without adding policy or composition.
-
-## REST and reactive boundaries
-
-- Validate params, query values, headers, and request entities at the HTTP boundary.
-- Preserve method, path, media type, status, and error contract behavior.
-- Use exception mappers for stable client-facing errors without leaking internal details.
-- Do not block I/O or event-loop threads in reactive endpoints.
-- Mark or move blocking work according to the application's execution model.
-- Preserve cancellation and failure semantics in reactive chains.
-- Keep DTO and persistence entity boundaries consistent with the repository.
-- Enforce authorization on the endpoint or service boundary, not only in client code.
-
-## Configuration and secrets
-
-- Use MicroProfile Config or typed config mappings according to local conventions.
-- Keep the `quarkus.` namespace for Quarkus configuration.
-- Use `%dev` and `%test` overrides only for environment-specific behavior.
-- Do not commit production secrets or print resolved secret values.
-- Preserve config source precedence and deployment-provided overrides.
-- Treat HTTP, TLS, CORS, OIDC, datasource, and management settings as security-sensitive.
-- Document new keys with safe defaults or explicit required status.
-
-## Transactions and persistence
-
-- Place `@Transactional` at the operation boundary that owns consistency.
-- Understand default rollback behavior before translating exceptions.
-- Keep remote calls outside transactions when possible.
-- Avoid accessing lazy state after transaction or session closure.
-- Bound queries and prevent N+1 behavior using the chosen ORM's supported mechanisms.
-- Use `@TestTransaction` only when rollback-after-test matches the behavior under test.
-- Treat schema generation and migration settings as environment-sensitive.
-- Never switch production schema handling to destructive recreation as a shortcut.
-
-## Messaging, jobs, and external services
-
-- Preserve acknowledgment, retry, dead-letter, ordering, and backpressure semantics.
-- Make repeated delivery safe where the transport is at-least-once.
-- Keep scheduled work safe across multiple instances.
-- Use existing REST Client or messaging abstractions instead of ad hoc network code.
-- Configure timeouts and failure handling at external boundaries.
-- Keep test services local through Dev Services or existing test resources.
-
-## Security
-
-- Use supported Quarkus Security mechanisms and standard authorization annotations.
-- Default to least privilege and test positive and negative role cases.
-- Do not disable authorization in production code or config to simplify testing.
-- Use test security identities only in test sources and profiles.
-- Keep tokens, credentials, cookies, and personal data out of logs.
-- Preserve OIDC audience, issuer, TLS, and token-validation rules.
-
-## Commands
-
-Use committed wrappers and project tasks. Typical examples:
+## Commands and tests
 
 ```text
 ./mvnw -Dtest=ExampleTest test
@@ -94,37 +24,12 @@ Use committed wrappers and project tasks. Typical examples:
 ./gradlew quarkusBuild
 ```
 
-- Use Quarkus dev mode for local exploration, not as the only validation.
-- Run native tests/builds only when native behavior changed or release requirements demand them.
-- Prefer focused JVM tests before integration or native suites.
+- Run focused JVM tests first. Use unit tests outside CDI, configured component tests for light wiring, and `@QuarkusTest` for HTTP/config/CDI/persistence/extensions; use local Dev Services/test resources only. Cover allowed and denied roles and explicit transaction behavior. Run integration/native checks only for packaging/native changes.
 
-## Testing
+## Routing and done
 
-- Use plain unit tests for logic that does not need CDI or Quarkus runtime.
-- Use component tests for CDI wiring with a lighter container when configured.
-- Use `@QuarkusTest` for HTTP, config, CDI, persistence, and extension integration.
-- Use test profiles for meaningfully different configurations, keeping profile count small.
-- Use test resources or Dev Services for local infrastructure; never point tests at shared production services.
-- Test secured behavior with explicit users and roles, including denied access.
-- Verify transaction rollback or persistence explicitly when it is part of behavior.
-- Use integration/native tests for packaging-specific behavior rather than duplicating all unit coverage.
-
-## Skill routing and delegation
-
-- Use `quarkus-general` when available for Quarkus implementation and validation.
-- Use `api-endpoint-change` for REST contracts and `database-migration` for schema work.
-- Use generic debugging and implementation skills for cross-layer failures or approved plans.
-- Delegate CDI/REST/persistence mapping or native-risk review for medium changes.
-- Use one-level workers for non-overlapping resource and adapter slices only after contracts are fixed.
-- Keep shared config, BOM/build files, security policy, DTOs, and migrations under one writer.
-
-## Definition of done
-
-- CDI, execution-model, transaction, and config boundaries remain valid.
-- Focused JVM tests and applicable integration/build checks pass.
-- Native-specific metadata is added only when required and verified when feasible.
-- Security roles include allowed and denied coverage.
-- No generated output, secret, or unrelated extension change entered the diff.
+- Use `quarkus-general`, `api-endpoint-change`, and `database-migration` when applicable; map CDI/REST/persistence or native risks before medium cross-layer work. Keep shared config, BOM/build, security policy, DTOs, and migrations under one writer.
+- Done: CDI, execution-model, transaction, and config boundaries remain valid; focused JVM plus applicable integration/build checks pass; native metadata is necessary and verified when feasible; role coverage includes denied access; no generated output, secrets, or unrelated extension changes entered the diff.
 
 ## Reference anchors
 

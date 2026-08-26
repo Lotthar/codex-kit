@@ -13,28 +13,35 @@ async function profile(id) {
   return readFile(join(root, 'profiles', id, 'AGENTS.md'), 'utf8');
 }
 
-test('profiles are substantial, bounded, and practical', async () => {
+test('profiles are compact, composable, and practical', async () => {
   for (const id of profileIds) {
     const content = await profile(id);
-    const lines = content.trimEnd().split(/\r?\n/).length;
-    assert.ok(lines >= 100, `${id} profile is too thin: ${lines} lines`);
-    assert.ok(lines <= 220, `${id} profile exceeds the context budget: ${lines} lines`);
-    assert.match(content, /## .*architecture/i);
-    assert.match(content, /## Commands|## Validation order/);
-    assert.match(content, /## Testing/);
-    assert.match(content, /## Skill routing/);
-    assert.match(content, /## Definition of done/);
+    assert.ok(Buffer.byteLength(content) <= 4 * 1024, `${id} profile exceeds its 4 KiB context budget`);
+    assert.match(content, /architecture|boundaries|build behavior/i);
+    assert.match(content, /## Commands|validation/i);
+    assert.match(content, /test/i);
+    assert.match(content, /skill|## .*Routing/i);
+    assert.match(content, /completion|Definition of done|Routing and done/i);
     assert.match(content, /## Reference anchors/);
   }
 });
 
 test('generic profile owns safe one-level delegation policy', async () => {
   const content = await profile('generic');
-  assert.match(content, /Do not delegate trivial fixes/);
+  assert.match(content, /Do not delegate trivial/);
   assert.match(content, /one level of focused subagents/);
-  assert.match(content, /Never create recursive subagent trees/);
+  assert.match(content, /never create recursive subagent trees/i);
   assert.match(content, /Wait for relevant subagents/);
-  assert.match(content, /main agent synthesize decisions and own the final patch/);
+  assert.match(content, /main agent synthesizes decisions and owns the final patch/);
+});
+
+test('generic profile retains scope, safety, and validation honesty', async () => {
+  const content = await profile('generic');
+  assert.match(content, /system, user, root `AGENTS\.md`, then nearest path instructions/);
+  assert.match(content, /unrelated user changes/);
+  assert.match(content, /Never expose secrets/);
+  assert.match(content, /Ask before destructive operations, migrations, deployments/);
+  assert.match(content, /Do not claim a check passed without evidence/);
 });
 
 test('runtime and framework profiles describe composable deltas', async () => {
@@ -61,9 +68,14 @@ test('profile instructions nest cleanly under the managed profile heading', asyn
   assert.doesNotMatch(text, /^## /m);
 });
 
-test('common composed profiles stay below the default Codex project guidance budget', async () => {
+test('common composed profiles stay below the compact managed-block budget', async () => {
   for (const profiles of [['generic', 'node', 'angular'], ['generic', 'java', 'spring'], ['generic', 'java', 'quarkus'], ['generic', 'flutter']]) {
     const block = renderManagedBlock({ profiles, instructions: await profileInstructions(profiles) });
-    assert.ok(Buffer.byteLength(block) < 32 * 1024, `${profiles.join(' + ')} exceeds 32 KiB`);
+    assert.ok(Buffer.byteLength(block) <= 10 * 1024, `${profiles.join(' + ')} exceeds 10 KiB`);
   }
+});
+
+test('generic plus Node stays within the preferred common project budget', async () => {
+  const block = renderManagedBlock({ profiles: ['generic', 'node'], instructions: await profileInstructions(['generic', 'node']) });
+  assert.ok(Buffer.byteLength(block) <= 8 * 1024, 'generic + node exceeds 8 KiB');
 });

@@ -86,6 +86,7 @@ function printHelp() {
     '',
     'Usage:',
     '  node tools/promptx/promptx.mjs "Add invoice CSV export"',
+    '  node tools/promptx/promptx.mjs --compact "Add invoice CSV export"',
     '  node tools/promptx/promptx.mjs --profile',
     '  node tools/promptx/promptx.mjs --refresh-profile',
     '  node tools/promptx/promptx.mjs --help',
@@ -560,6 +561,65 @@ function buildEnhancedPrompt(task, options = {}) {
   ].join('\n'));
 }
 
+function truncateUtf8(value, maxBytes) {
+  const text = String(value);
+  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text;
+  const suffix = '…';
+  const limit = Math.max(0, maxBytes - Buffer.byteLength(suffix, 'utf8'));
+  let output = '';
+  for (const character of text) {
+    if (Buffer.byteLength(output + character, 'utf8') > limit) break;
+    output += character;
+  }
+  return output + suffix;
+}
+
+function compactTask(task) {
+  return truncateUtf8(redactSecrets(task).replace(/\s+/g, ' ').trim(), 640);
+}
+
+function compactRisks(taskType) {
+  const risks = ['Keep the change scoped; preserve existing contracts and avoid secret exposure.'];
+  if (taskType === 'security') risks.unshift('Validate trust boundaries, authorization, and malformed input.');
+  if (taskType === 'migration') risks.unshift('Preserve data, compatibility, and a rollback path.');
+  if (taskType === 'refactor') risks.unshift('Preserve observable behavior and public APIs.');
+  if (taskType === 'bugfix') risks.unshift('Cover the reported behavior with a focused regression check.');
+  if (taskType === 'performance') risks.unshift('Measure the changed path before and after optimization.');
+  return risks.slice(0, 3);
+}
+
+function compactBrainQuery(task) {
+  const terms = promptTerms(redactSecrets(task)).slice(0, 6);
+  return truncateUtf8(terms.join(' '), 192) || 'project decisions lessons runbooks';
+}
+
+function buildCompactPrompt(task, options = {}) {
+  const rootInfo = options.rootInfo || findRepoRoot();
+  const profile = options.profile || readOrBuildProfile(rootInfo);
+  const taskType = classifyTask(task);
+  const relevantFiles = rankRelevantFiles(task, profile).slice(0, 5);
+  const verification = chooseVerificationCommands(taskType, profile).slice(0, 4);
+  const packet = [
+    '# Compact task packet',
+    '',
+    'Task: ' + compactTask(task),
+    'Type: ' + taskType,
+    '',
+    'Likely files:',
+    ...(relevantFiles.length ? relevantFiles.map((file) => '- `' + truncateUtf8(redactSecrets(file), 180) + '`') : ['- Inspect `AGENTS.md` and search for the task terms.']),
+    '',
+    'Checks:',
+    ...(verification.length ? verification.map((command) => '- `' + truncateUtf8(redactSecrets(command), 240) + '`') : ['- Run the narrowest relevant check available.']),
+    '',
+    'Material risks:',
+    ...compactRisks(taskType).map((risk) => '- ' + risk),
+    '',
+    'Brain query: ' + compactBrainQuery(task),
+    '',
+  ].join('\n');
+  return truncateUtf8(redactSecrets(packet), 3072);
+}
+
 function redactSecrets(value) {
   let output = String(value);
   for (const pattern of SECRET_PATTERNS) {
@@ -594,14 +654,18 @@ function main(argv = process.argv.slice(2)) {
     return;
   }
 
-  const prompt = argv.filter((arg) => !arg.startsWith('--')).join(' ').trim();
+  const compactIndex = argv.indexOf('--compact');
+  const compact = compactIndex !== -1;
+  const prompt = compact
+    ? argv.slice(compactIndex + 1).filter((arg) => !arg.startsWith('--')).join(' ').trim()
+    : argv.filter((arg) => !arg.startsWith('--')).join(' ').trim();
   if (!prompt) {
     printHelp();
     process.exitCode = 1;
     return;
   }
 
-  console.log(buildEnhancedPrompt(prompt, { rootInfo }));
+  console.log(compact ? buildCompactPrompt(prompt, { rootInfo }) : buildEnhancedPrompt(prompt, { rootInfo }));
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
@@ -610,6 +674,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
 
 export {
   buildEnhancedPrompt,
+  buildCompactPrompt,
   buildRepoProfile,
   classifyTask,
   detectCommands,

@@ -18,6 +18,14 @@ The setup is idempotent. It creates the CLI, templates, eval examples, a local C
 node tools/promptx/promptx.mjs "Add invoice CSV export"
 ```
 
+For a bounded context packet intended for internal agent use:
+
+```bash
+node tools/promptx/promptx.mjs --compact "Add invoice CSV export"
+```
+
+`--compact` keeps the task type, up to five likely files, four checks, material risks, and a narrow Brain query within 3 KiB. The default command continues to print the full prompt.
+
 Optional direct Codex usage:
 
 ```bash

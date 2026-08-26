@@ -12,13 +12,14 @@ When invoked:
 3. Infer the stack, package manager, test commands, and repo layout.
 4. Classify the task as feature, bugfix, refactor, test, docs, migration, debugging, code-review, performance, or security.
 5. Use file search to identify likely relevant files.
-6. When `tools/promptx/promptx.mjs` exists, prefer running it from the project root for deterministic profiling and redaction.
-7. Produce an enhanced Codex prompt.
+6. When `tools/promptx/promptx.mjs` exists, prefer `--compact` from the project root for deterministic profiling and redaction.
+7. Consume the compact packet as working context; do not echo a large generated prompt unless the user specifically asks for one.
 
 Useful commands:
 
 ```text
 node tools/promptx/promptx.mjs "<rough task>"
+node tools/promptx/promptx.mjs --compact "<rough task>"
 node tools/promptx/promptx.mjs --profile
 node tools/promptx/promptx.mjs --refresh-profile
 ```
@@ -27,7 +28,7 @@ Rules:
 
 - Do not invent repo facts.
 - Do not include secrets or `.env` values.
-- Keep the final prompt focused.
+- Keep the final response focused; use the compact packet internally when sufficient.
 - Prefer file paths and verification commands over broad descriptions.
 - Include assumptions only when clearly marked.
 - Ask for clarification only when the task is genuinely blocked.

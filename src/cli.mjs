@@ -10,6 +10,7 @@ import { enrich, sanitizedInventory } from './enrichment.mjs';
 import { importSkill } from './skills.mjs';
 import { listTransactions } from './transaction.mjs';
 import { brainAudit, brainConfigure, brainInit, brainMigrate, brainRecall, brainRemember, brainStatus } from './obsidian.mjs';
+import { contextStatus } from './context.mjs';
 
 const help = `Codex Kit — reproducible Codex setup
 
@@ -22,6 +23,7 @@ Usage:
   codex-kit brain migrate --to PROJECT_KEY [--root PATH] [--yes]
   codex-kit brain recall --query TEXT [--cross-project] [--root PATH]
   codex-kit brain remember --kind KIND --title TEXT --summary TEXT [--details TEXT] [--source REF] [--supersedes KEY] [--yes]
+  codex-kit context status [--root PATH] [--home PATH] [--json]
   codex-kit project init|plan|apply|refresh|status [--root PATH]
   codex-kit component add|remove|list ID [--root PATH]
   codex-kit skill import NAME --source PATH [--yes]
@@ -170,7 +172,8 @@ export async function main(argv = process.argv.slice(2)) {
       else if (subcommand === 'recall') result = await brainRecall({ home: values.home || codexHome(), root, projectKey, query: values.query, crossProject: values['cross-project'] });
       else if (subcommand === 'remember') result = await brainRemember({ home: values.home || codexHome(), root, projectKey, kind: values.kind, title: values.title, summary: values.summary, details: values.details, source: values.source, supersedes: values.supersedes, execute: shouldApply });
       else result = await brainAudit({ home: values.home || codexHome(), root, projectKey, crossProject: values['cross-project'] });
-    } else if (command === 'project' && ['init', 'plan', 'apply', 'refresh'].includes(subcommand)) {
+    } else if (command === 'context' && subcommand === 'status') result = await contextStatus({ root: values.root || process.cwd(), home: values.home || codexHome() });
+    else if (command === 'project' && ['init', 'plan', 'apply', 'refresh'].includes(subcommand)) {
       const root = values.root || process.cwd();
       const shouldExecute = ['init', 'refresh', 'apply'].includes(subcommand) && shouldApply;
       result = await initProject({ root, preset: values.preset || 'developer', execute: shouldExecute, enrich: values.enrich });

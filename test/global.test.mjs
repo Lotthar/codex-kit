@@ -29,14 +29,17 @@ test('personal setup installs the global brain skill and optional native memorie
   const agents = await readFile(join(home, 'AGENTS.md'), 'utf8');
   assert.match(agents, /obsidian-brain/);
   assert.match(agents, /narrowly approved desktop\/Obsidian CLI access/);
-  assert.match(agents, /Before the final response on every validated non-trivial task/);
+  assert.match(agents, /runs `\$obsidian-project-brain` once/);
+  assert.match(agents, /Stable personal preference or correction/);
+  assert.match(agents, /two proven successful uses/);
   assert.match(agents, /remembered: true/);
   assert.match(await readFile(join(home, 'config.toml'), 'utf8'), /memories = true/);
   const skill = await readFile(join(home, 'skills', 'obsidian-project-brain', 'SKILL.md'), 'utf8');
   assert.match(skill, /name: obsidian-project-brain/);
   assert.match(skill, /narrowly approved desktop\/Obsidian CLI access/);
-  assert.match(skill, /Before the final response on every validated non-trivial task/);
-  assert.match(skill, /A preview is not a capture/);
+  assert.match(skill, /Once per non-trivial project task/);
+  assert.match(skill, /Learning destinations/);
+  assert.match(skill, /preview alone is not capture/);
   assert.match(skill, /remembered: true/);
 });
 

@@ -63,11 +63,13 @@ Projects/<projectKey>/
 
 ### Normal use: no recurring setup command
 
-Open Codex in the configured project and work normally. The managed policy tells agents to retrieve a small, relevant context packet before substantial work and requires the parent agent to make a capture decision after validation and before final handoff. Durable decisions, recurring verified lessons, reusable runbooks, and unresolved cross-task questions are previewed, appended, and verified; routine work is explicitly skipped. Repository code, tests, and `AGENTS.md` remain authoritative; recalled notes are labelled as untrusted supporting context.
+Open Codex in the configured project and work normally. The managed policy tells agents to retrieve one small, task-specific context packet before substantial work and requires the parent agent to make a capture decision after validation and before final handoff. Durable decisions, recurring verified lessons, reusable runbooks, and unresolved cross-task questions are previewed, appended, and verified; routine work is explicitly skipped. Repository code, tests, and `AGENTS.md` remain authoritative; recalled notes are labelled as untrusted supporting context.
 
 Project Brain remains curated and event-driven, not a background watcher. Subagents can propose concise Brain candidates, but only the parent writes a focused note and only when the validated result will help future work.
 
-Recall is intentionally bounded to `Home.md` plus at most five relevant notes, no more than 2 KiB per note and 8 KiB overall. Default recall stays inside the current project. Cross-project recall must be explicitly requested.
+Learning has three destinations: stable personal preferences are proposed for native Codex memory and require explicit user approval; verified project knowledge goes to the Project Brain; a repeatable procedure becomes a skill proposal only after an explicit request or two successful uses. Codex Kit does not run a background model or autonomously rewrite memory, skills, or policy.
+
+Recall is intentionally bounded to compact `Home.md` metadata plus at most three ranked notes, no more than 1 KiB per block and 4 KiB overall. Unsafe or malformed bodies are suppressed and reported only by safe metadata. Default recall stays inside the current project; cross-project recall must be explicitly requested.
 
 For direct inspection or intentional capture:
 
@@ -100,6 +102,7 @@ After setup:
 ```text
 codex-kit diff
 codex-kit project status
+codex-kit context status
 codex-kit doctor
 ```
 
@@ -170,7 +173,9 @@ Profiles compose from general to specific:
 
 Each profile is a bounded playbook covering architecture, framework conventions, clean-code boundaries, security, common commands, testing, skill routing, delegation, and definition of done. Shared rules live in `generic`; runtime and framework profiles add only their layer.
 
-Codex Kit tests the common composed profile sets against Codex's default 32 KiB project-guidance budget so richer instructions do not silently crowd themselves out.
+Codex Kit keeps detailed procedures in on-demand skills and tests common composed profiles against a 10 KiB managed-project budget. `codex-kit context status` reports global and project `AGENTS.md` totals, Kit-managed versus human-authored bytes, their combined known static footprint, the Kit-managed subtotal, the Brain budget, and duplicate Kit-owned skills. The migration target is at most 16 KiB of combined known static guidance; human-authored text is measured separately and never silently removed.
+
+For an existing personal installation, back up the global `AGENTS.md`, rerun `codex-kit setup --preset personal --yes`, refresh configured projects, and verify `codex-kit context status` before accepting any manual cleanup of human-authored global guidance. Kit setup itself changes only managed marker blocks and retains transaction receipts for rollback.
 
 Codex Kit writes between `<!-- codex-kit:project:start -->` and `<!-- codex-kit:project:end -->`. Human-authored instructions outside that block are preserved.
 
@@ -196,8 +201,11 @@ PromptX also installs its runnable CLI and templates:
 
 ```text
 node tools/promptx/promptx.mjs "Add invoice CSV export"
+node tools/promptx/promptx.mjs --compact "Add invoice CSV export"
 node tools/promptx/promptx.mjs --refresh-profile
 ```
+
+The default PromptX output remains the full enhanced prompt. `--compact` emits a deterministic, redacted packet capped at 3 KiB for internal agent use.
 
 ## Commands
 
@@ -214,6 +222,7 @@ node tools/promptx/promptx.mjs --refresh-profile
 | `brain status`, `brain audit` | Inspect integration health and note metadata without writing |
 | `brain recall --query QUERY [--cross-project]` | Retrieve bounded, labelled supporting context |
 | `brain remember --kind KIND --title TITLE --summary SUMMARY --yes` | Append a durable note; supports `--details`, `--source`, and `--supersedes` |
+| `context status [--root PATH] [--home PATH]` | Measure managed/human context bytes, Brain budget, and duplicate Kit-owned skills |
 | `component add/remove/list` | Change selected project components |
 | `skill import` | Copy one validated local skill with provenance |
 | `diff`, `history`, `rollback` | Review and recover managed project changes |

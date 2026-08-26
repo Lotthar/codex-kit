@@ -7,6 +7,11 @@
 
 ## Unreleased
 
+- Added read-only `context status` diagnostics for global/project `AGENTS.md` byte accounting, the Brain recall budget, and duplicate Kit-owned skill names.
+- Reduced always-loaded profile guidance and added managed static-context budgets without estimating tokens or quota savings.
+- Added PromptX `--compact` for deterministic, redacted task packets capped at 3 KiB while retaining the existing full output by default.
+- Tightened Project Brain recall to ranked metadata, three notes, 1 KiB blocks, and 4 KiB total, with metadata-only suppression for unsafe or malformed content.
+- Documented the approval-gated learning contract: native memory for stable personal preferences, Project Brain for verified project knowledge, and skills for proven procedures.
 - Added the optional Obsidian Project Brain integration: official-CLI configuration, stable project namespaces, bounded recall, append-only durable notes, audit/status commands, and a global Codex skill and policy.
 - Added the Project Brain to the `personal` preset while keeping it opt-in for `developer`, with machine-local vault selection and commit-friendly project keys for repeatable setup on new devices.
 - Added explicit opt-in support for native Codex memories as a separate experimental layer.

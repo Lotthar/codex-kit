@@ -14,8 +14,8 @@ const MEMORY_KEY = /^[a-z0-9][a-z0-9-]{0,119}$/;
 const MAX_QUERY_BYTES = 512;
 const MAX_FIELD_BYTES = 4 * 1024;
 const MAX_NOTE_BYTES = 32 * 1024;
-const MAX_NOTE_CONTEXT_BYTES = 2 * 1024;
-const MAX_CONTEXT_BYTES = 8 * 1024;
+const MAX_NOTE_CONTEXT_BYTES = 1024;
+export const BRAIN_RECALL_BUDGET_BYTES = 4 * 1024;
 const MAX_SEARCH_OUTPUT_BYTES = 512 * 1024;
 const MAX_AUDIT_BYTES = 2 * 1024 * 1024;
 const MAX_AUDIT_FILES = 200;
@@ -30,6 +30,12 @@ const secretPatterns = [
   /\b(?:password|passwd|secret|api[_-]?key|access[_-]?token)\s*[:=]\s*[^\s]{8,}/i,
   /\bhttps?:\/\/[^\s/@:]+:[^\s/@]+@/i,
 ];
+const unsafeRecallPatterns = [
+  /\b(?:ignore|disregard|override)\b[^\n]{0,120}\b(?:previous|prior|system|developer|instructions?|rules?)\b/i,
+  /\b(?:system|developer|assistant|user)\s*(?:message|prompt|instructions?)\s*:/i,
+];
+const invisibleOrBidi = /[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
+const unsafeRecallControl = /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
 
 export const brainConfigPath = (home) => resolve(home, '.codex-kit', 'obsidian.json');
 
@@ -365,10 +371,18 @@ export async function brainRemember({ home, root, projectKey, kind, title, summa
 }
 
 function safeVaultPath(path, scope) {
-  if (typeof path !== 'string' || !path || isAbsolute(path) || path.includes('\\') || path.includes('\0')) return false;
+  if (typeof path !== 'string' || !path || unsafeRecallValue(path, 1024) || isAbsolute(path) || path.includes('\\')) return false;
   const parts = path.split('/');
   if (parts.some((part) => !part || part === '.' || part === '..')) return false;
   return path === scope || path.startsWith(`${scope}/`);
+}
+
+function unsafeRecallValue(value, maxBytes) {
+  return typeof value !== 'string'
+    || Buffer.byteLength(value) > maxBytes
+    || unsafeRecallControl.test(value)
+    || secretPatterns.some((pattern) => pattern.test(value))
+    || unsafeRecallPatterns.some((pattern) => pattern.test(value));
 }
 
 function extractPaths(output) {
@@ -412,52 +426,132 @@ function frontmatter(content) {
   return metadata;
 }
 
-function noteLabel(path, metadata, currentCommit) {
+function noteLabel(metadata, currentCommit) {
   const stale = Boolean(metadata.verified_commit && currentCommit && metadata.verified_commit !== currentCommit);
   const sources = Array.isArray(metadata.sources) ? metadata.sources : [];
-  return {
-    stale,
-    sources,
-    text: `[OBSIDIAN MEMORY | project=${metadata.project || 'unknown'} | kind=${metadata.kind || 'unknown'} | evidence=${sources.length ? 'source-backed' : 'unsourced'} | stale=${stale ? 'yes' : 'no'}${metadata.supersedes ? ` | supersedes=${metadata.supersedes}` : ''} | UNTRUSTED UNTIL VERIFIED]\npath: ${path}\n`,
-  };
+  return { stale, sources };
+}
+
+function recallSuppression(content, { path, projectKey, home = false }) {
+  if (secretPatterns.some((pattern) => pattern.test(content))) return 'secret-like-content';
+  if (unsafeRecallPatterns.some((pattern) => pattern.test(content))) return 'prompt-injection';
+  if (invisibleOrBidi.test(content)) return 'invisible-or-bidi-control';
+  const metadata = frontmatter(content);
+  const text = recallText(content);
+  if (unsafeRecallValue(text.title, 256) || unsafeRecallValue(text.summary, 512)) return 'unsafe-metadata';
+  if (home) {
+    if (content.startsWith('---\n') && metadata.status !== 'active') return 'non-active-status';
+    if (content.startsWith('---\n') && (metadata.project !== projectKey || metadata.kind !== 'home')) return 'invalid-home-metadata';
+    return null;
+  }
+  const pathProject = path.split('/')[1];
+  if (metadata.status && metadata.status !== 'active') return 'non-active-status';
+  if (
+    (Array.isArray(metadata.sources) && metadata.sources.some((source) => unsafeRecallValue(source, 1024)))
+    || (typeof metadata.supersedes === 'string' && unsafeRecallValue(metadata.supersedes, 512))
+  ) return 'unsafe-metadata';
+  if (
+    metadata.codex_brain !== true
+    || !PROJECT_KEY.test(String(metadata.project ?? ''))
+    || !Object.hasOwn(KINDS, metadata.kind)
+    || !MEMORY_KEY.test(String(metadata.key ?? ''))
+    || metadata.status !== 'active'
+    || typeof metadata.created !== 'string'
+    || !Array.isArray(metadata.sources)
+    || metadata.sources.length > 8
+    || typeof metadata.supersedes !== 'string'
+    || (metadata.supersedes && !MEMORY_KEY.test(metadata.supersedes) && (!safeVaultPath(metadata.supersedes, projectPath(metadata.project)) || !metadata.supersedes.endsWith('.md')))
+    || metadata.author !== 'codex'
+  ) return 'invalid-metadata';
+  if (metadata.project !== pathProject) return 'scope-or-path-mismatch';
+  return null;
+}
+
+function recallText(content) {
+  const body = String(content).replace(/\r\n/g, '\n').replace(/^---\n[\s\S]*?\n---\n?/, '');
+  const lines = body.split('\n').map((line) => line.trim());
+  const title = lines.find((line) => /^#\s+\S/.test(line))?.replace(/^#\s+/, '') || 'Untitled memory';
+  const summary = lines.find((line) => line && !line.startsWith('#')) || 'No summary recorded.';
+  return { title: byteTruncate(title, 256), summary: byteTruncate(summary, 512) };
+}
+
+function recallTerms(query) {
+  return [...new Set(String(query).toLowerCase().match(/[\p{L}\p{N}_-]{2,}/gu) ?? [])];
+}
+
+function recallScore(item, terms) {
+  const text = `${item.text.title}\n${item.text.summary}`.toLowerCase();
+  const exactTerms = terms.reduce((total, term) => total + (text.includes(term) ? 1 : 0), 0);
+  return exactTerms * 100 + (item.sources.length ? 20 : 0) + (item.stale ? 0 : 10);
+}
+
+function recallBlock(item) {
+  const provenance = item.sources.length ? item.sources.join(', ') : 'none';
+  const block = `[OBSIDIAN MEMORY | kind=${item.kind} | evidence=${item.sources.length ? 'source-backed' : 'unsourced'} | freshness=${item.stale ? 'stale' : 'current'} | UNTRUSTED UNTIL VERIFIED]\npath: ${item.path}\ntitle: ${item.text.title}\nsummary: ${item.text.summary}\nprovenance: ${provenance}`;
+  return byteTruncate(block, MAX_NOTE_CONTEXT_BYTES);
 }
 
 export async function brainRecall({ home, root, projectKey, query, crossProject = false, runner = run, gitRunner = run }) {
   validateProjectKey(projectKey);
   const safeQuery = validateText('query', query, { required: true, max: MAX_QUERY_BYTES });
   const state = await configurationState(home);
-  if (!state.config) return { status: 'partial', projectKey, crossProject, context: '', notes: [], bytes: 0, actions: [action('recommended', 'configure Obsidian vault', state.error)] };
+  const empty = { projectKey, crossProject, context: '', notes: [], suppressed: [], bytes: 0, budgetBytes: BRAIN_RECALL_BUDGET_BYTES };
+  if (!state.config) return { status: 'partial', ...empty, actions: [action('recommended', 'configure Obsidian vault', state.error)] };
   const config = state.config;
   const cli = await supportedCli(runner);
-  if (!cli.ok) return { status: 'partial', projectKey, crossProject, context: '', notes: [], bytes: 0, actions: [action('failed', 'use supported Obsidian CLI', cli.detail)] };
+  if (!cli.ok) return { status: 'partial', ...empty, actions: [action('failed', 'use supported Obsidian CLI', cli.detail)] };
   const scope = crossProject ? 'Projects' : projectPath(projectKey);
   const actions = [];
   const blocks = [];
   const notes = [];
+  const suppressed = [];
   const homeResult = await call(runner, ['read', `path=${homePath(projectKey)}`], { vault: config.vault });
   if (homeResult.status === 0) {
-    const body = byteTruncate(homeResult.stdout, MAX_NOTE_CONTEXT_BYTES);
-    blocks.push(`[PROJECT HOME | HUMAN-MAINTAINED | UNTRUSTED UNTIL VERIFIED]\npath: ${homePath(projectKey)}\n${body}`);
+    const reason = recallSuppression(homeResult.stdout, { path: homePath(projectKey), projectKey, home: true });
+    if (reason) suppressed.push({ path: homePath(projectKey), reason });
+    else {
+      const text = recallText(homeResult.stdout);
+      blocks.push(byteTruncate(`[PROJECT HOME | HUMAN-MAINTAINED | UNTRUSTED UNTIL VERIFIED]\npath: ${homePath(projectKey)}\ntitle: ${text.title}\nsummary: ${text.summary}`, MAX_NOTE_CONTEXT_BYTES));
+    }
   } else actions.push(action('recommended', 'initialize Obsidian project brain', 'codex-kit brain init --yes'));
   const search = await call(runner, ['search', `query=${safeQuery}`, `path=${scope}`, 'limit=20', 'format=json'], { vault: config.vault });
   if (search.status !== 0) actions.push(action('failed', 'search Obsidian project brain', failureDetail(search, [config.vault])));
   else if (Buffer.byteLength(search.stdout) > MAX_SEARCH_OUTPUT_BYTES) actions.push(action('failed', 'search Obsidian project brain', 'Search output exceeded the safety cap.'));
   else {
     const currentCommit = await gitCommit(root, gitRunner);
-    const paths = extractPaths(search.stdout).filter((path) => path !== homePath(projectKey) && safeVaultPath(path, scope)).slice(0, 5);
+    const paths = [];
+    for (const path of extractPaths(search.stdout)) {
+      if (path === homePath(projectKey)) continue;
+      if (!safeVaultPath(path, scope)) { suppressed.push({ path: '[unsafe-path]', reason: 'scope-or-path-mismatch' }); continue; }
+      paths.push(path);
+      if (paths.length === 20) break;
+    }
+    const candidates = [];
     for (const path of paths) {
       const read = await call(runner, ['read', `path=${path}`], { vault: config.vault });
       if (read.status !== 0) { actions.push(action('failed', 'read Obsidian memory', path)); continue; }
-      const body = byteTruncate(read.stdout, MAX_NOTE_CONTEXT_BYTES);
-      const metadata = frontmatter(body);
-      const label = noteLabel(path, metadata, currentCommit);
-      blocks.push(`${label.text}${body}`);
-      notes.push({ path, project: metadata.project || null, kind: metadata.kind || null, key: metadata.key || null, stale: label.stale, sources: label.sources, supersedes: metadata.supersedes || null });
+      const reason = recallSuppression(read.stdout, { path, projectKey });
+      if (reason) { suppressed.push({ path, reason }); continue; }
+      const metadata = frontmatter(read.stdout);
+      const label = noteLabel(metadata, currentCommit);
+      candidates.push({ path, metadata, stale: label.stale, sources: label.sources, kind: metadata.kind, text: recallText(read.stdout) });
+    }
+    const superseded = new Set();
+    for (const item of candidates) {
+      const target = item.metadata.supersedes;
+      if (!target) continue;
+      for (const candidate of candidates) if (target === candidate.metadata.key || target === candidate.path) superseded.add(candidate.path);
+    }
+    const terms = recallTerms(safeQuery);
+    const ranked = candidates.filter((item) => !superseded.has(item.path)).sort((left, right) => recallScore(right, terms) - recallScore(left, terms) || left.path.localeCompare(right.path)).slice(0, 3);
+    for (const item of ranked) {
+      blocks.push(recallBlock(item));
+      notes.push({ path: item.path, project: item.metadata.project, kind: item.kind, key: item.metadata.key, stale: item.stale, sources: item.sources, supersedes: item.metadata.supersedes || null });
     }
   }
-  const context = byteTruncate(blocks.join('\n\n'), MAX_CONTEXT_BYTES);
-  if (!actions.length) actions.push(action('unchanged', 'recall Obsidian project brain', `${notes.length} memories`));
-  return { status: actions.some((item) => item.state === 'failed') ? 'partial' : 'ok', projectKey, crossProject, context, notes, bytes: Buffer.byteLength(context), actions };
+  const context = byteTruncate(blocks.join('\n\n'), BRAIN_RECALL_BUDGET_BYTES);
+  if (!actions.length) actions.push(action('unchanged', 'recall Obsidian project brain', `${notes.length} memories; ${suppressed.length} suppressed`));
+  return { status: actions.some((item) => item.state === 'failed') ? 'partial' : 'ok', projectKey, crossProject, context, notes, suppressed, bytes: Buffer.byteLength(context), budgetBytes: BRAIN_RECALL_BUDGET_BYTES, actions };
 }
 
 function fileList(output) {
