@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0-beta.1
+
+- Added a machine-local Brain work-project registry with inclusion controls, project/topic indexes, bounded related-project recall, and legacy `--cross-project` compatibility.
+- Added previewable Brain reconciliation, generated `CodexKit/Brain` pages, source-preserving outcomes, drift diagnostics and hash-guarded Brain-skill repair.
+- Added resumable `upgrade --all` orchestration with per-target receipts; rollouts report partial completion rather than claiming global atomicity.
+
 ## 0.2.0-beta.2
 
 - Added opt-in global model routing that resolves the available Codex model catalog into an orchestrator profile and namespaced mapper, worker, reviewer, and support agents.

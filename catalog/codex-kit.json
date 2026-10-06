@@ -14,6 +14,7 @@
       "kind": "policy",
       "scope": ["global", "project"],
       "source": "policies/obsidian-brain.md",
+      "projectInstructions": true,
       "assets": [
         { "source": "workflow-skills/obsidian-project-brain", "target": ".agents/skills/obsidian-project-brain" }
       ],

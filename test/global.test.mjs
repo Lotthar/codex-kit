@@ -28,18 +28,21 @@ test('personal setup installs the global brain skill and optional native memorie
   assert.match(await readFile(join(home, 'AGENTS.md'), 'utf8'), /# Human global rules/);
   const agents = await readFile(join(home, 'AGENTS.md'), 'utf8');
   assert.match(agents, /obsidian-brain/);
-  assert.match(agents, /narrowly approved desktop\/Obsidian CLI access/);
-  assert.match(agents, /runs `\$obsidian-project-brain` once/);
-  assert.match(agents, /Stable personal preference or correction/);
+  assert.match(agents, /narrowly approved official desktop\/Obsidian CLI access/);
+  assert.match(agents, /uses `\$obsidian-project-brain` once before decisions/);
+  assert.match(agents, /Stable personal preferences require explicit user approval/);
   assert.match(agents, /two proven successful uses/);
   assert.match(agents, /remembered: true/);
+  assert.match(agents, /--scope related/);
+  assert.match(agents, /excluded and pending projects/);
+  assert.match(agents, /Check `indexed` separately/);
   assert.match(await readFile(join(home, 'config.toml'), 'utf8'), /memories = true/);
   const skill = await readFile(join(home, 'skills', 'obsidian-project-brain', 'SKILL.md'), 'utf8');
   assert.match(skill, /name: obsidian-project-brain/);
-  assert.match(skill, /narrowly approved desktop\/Obsidian CLI access/);
-  assert.match(skill, /Once per non-trivial project task/);
-  assert.match(skill, /Learning destinations/);
-  assert.match(skill, /preview alone is not capture/);
+  assert.match(skill, /narrowly approved desktop access/);
+  assert.match(skill, /Once per non-trivial work task/);
+  assert.match(skill, /Personal preferences require explicit approval in native memory/);
+  assert.match(skill, /The decision is mandatory; creating a note is not/);
   assert.match(skill, /remembered: true/);
 });
 

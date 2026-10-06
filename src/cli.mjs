@@ -5,12 +5,16 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { action, atomicWrite, print } from './util.mjs';
 import { applyGlobal, applyModelRoutingPlan, checkUpdates, codexHome, globalPlan, modelRoutingPlan, modelRoutingStatus, safeExport, setAllowlistedConfig } from './global.mjs';
-import { applyProject, doctor, findProjectRoot, initProject, modifyProject, projectDiff, projectPlan, projectStatus, rollbackProject } from './project.mjs';
+import { applyProject, doctor, findProjectRoot, modifyProject, projectDiff, projectPlan, projectStatus, rollbackProject } from './project.mjs';
 import { enrich, sanitizedInventory } from './enrichment.mjs';
 import { importSkill } from './skills.mjs';
 import { listTransactions } from './transaction.mjs';
-import { brainAudit, brainConfigure, brainInit, brainMigrate, brainRecall, brainRemember, brainStatus } from './obsidian.mjs';
-import { contextStatus } from './context.mjs';
+import { brainAudit, brainConfigure, brainInit, brainMigrate, brainRecall, brainRead, brainStatus } from './obsidian.mjs';
+import { brainProjects, brainRegister, brainRekey, loadBrainRegistry } from './brain-registry.mjs';
+import { brainReconcile } from './brain-reconcile.mjs';
+import { brainRepair } from './brain-repair.mjs';
+import { brainAlignment, finishProjectSetup, prepareProject, registerProject, rememberAndIndex, resolveBrainContext, setupProject } from './brain-workflow.mjs';
+import { upgradeAll } from './brain-upgrade.mjs';
 
 const help = `Codex Kit — reproducible Codex setup
 
@@ -19,16 +23,22 @@ Usage:
   codex-kit setup [--preset NAME] [--model-routing] [--obsidian] [--memories] [--yes] [--allow-network]
   codex-kit models status|refresh [--home PATH] [--yes]
   codex-kit brain configure --vault NAME [--home PATH] [--yes]
-  codex-kit brain init|status|audit [--root PATH]
+  codex-kit brain register [--root PATH | --external-id ID] [--project KEY] [--name NAME] [--topics CSV] [--inclusion included|excluded|pending] [--yes]
+  codex-kit brain projects [--home PATH]
+  codex-kit brain init|status|audit [--root PATH] [--project KEY]
+  codex-kit brain reconcile [--scope project|all] [--project KEY] [--yes]
+  codex-kit brain read --path NOTE_PATH [--project KEY]
+  codex-kit brain repair --scope global|project [--root PATH] [--expected-hash HASH] [--yes]
   codex-kit brain migrate --to PROJECT_KEY [--root PATH] [--yes]
-  codex-kit brain recall --query TEXT [--cross-project] [--root PATH]
-  codex-kit brain remember --kind KIND --title TEXT --summary TEXT [--details TEXT] [--source REF] [--supersedes KEY] [--yes]
+  codex-kit brain recall --query TEXT [--scope project|related|all] [--cross-project] [--project KEY] [--root PATH]
+  codex-kit brain remember --kind decision|lesson|runbook|question|overview --title TEXT --summary TEXT [--details TEXT] [--source REF] [--supersedes KEY] [--yes]
   codex-kit context status [--root PATH] [--home PATH] [--json]
   codex-kit project init|plan|apply|refresh|status [--root PATH]
   codex-kit component add|remove|list ID [--root PATH]
   codex-kit skill import NAME --source PATH [--yes]
   codex-kit diff [--root PATH]
-  codex-kit doctor
+  codex-kit doctor [--all]
+  codex-kit upgrade --all [--expected-hash HASH] [--resume ID] [--yes]
   codex-kit history [--root PATH]
   codex-kit rollback [--transaction ID] [--root PATH]
   codex-kit update --check [--allow-network]
@@ -38,6 +48,7 @@ Usage:
 Mutations preview by default. --yes applies; --dry-run always previews; --json never prompts.`;
 
 const optionSpec = {
+  all: { type: 'boolean' }, scope: { type: 'string' }, project: { type: 'string' }, name: { type: 'string' }, topics: { type: 'string' }, inclusion: { type: 'string' }, 'external-id': { type: 'string' }, path: { type: 'string' }, 'expected-hash': { type: 'string' }, resume: { type: 'string' },
   yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, json: { type: 'boolean' }, help: { type: 'boolean' }, check: { type: 'boolean' }, 'include-content': { type: 'boolean' }, 'allow-network': { type: 'boolean' }, 'model-routing': { type: 'boolean' }, memories: { type: 'boolean' }, obsidian: { type: 'boolean' }, 'cross-project': { type: 'boolean' }, enrich: { type: 'boolean' }, global: { type: 'boolean' }, preset: { type: 'string' }, home: { type: 'string' }, root: { type: 'string' }, source: { type: 'string' }, output: { type: 'string' }, transaction: { type: 'string' }, value: { type: 'string' }, vault: { type: 'string' }, query: { type: 'string' }, kind: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' }, details: { type: 'string' }, supersedes: { type: 'string' }, to: { type: 'string' }
 };
 
@@ -73,7 +84,7 @@ async function runWizard(values) {
     const plans = [];
     const recommendations = foundationRecommendations();
     if (scope !== 'global') {
-      let plan = await projectPlan({ root: values.root || process.cwd(), preset });
+      let plan = await prepareProject({ home: values.home || codexHome(), root: values.root || process.cwd(), preset });
       recommendations.splice(0, recommendations.length, ...foundationRecommendations(plan.graphifyRecommended));
       stdout.write(`Detected profiles: ${plan.profiles.join(', ')}.\n`);
       const tools = (await rl.question('Project foundation (graphify,workflow-skills,promptx,clean-code) [all for preset]: ')).trim();
@@ -102,9 +113,8 @@ async function runWizard(values) {
     const results = [];
     if (useBrain) results.push(await brainConfigure({ home: values.home || codexHome(), vault, execute: true }));
     for (const plan of plans) {
-      const applied = plan.root ? await applyProject(plan) : await applyGlobal(plan, allowNetwork);
+      const applied = plan.root ? await finishProjectSetup({ home: values.home || codexHome(), result: await applyProject(plan), execute: true }) : await applyGlobal(plan, allowNetwork);
       results.push(applied);
-      if (plan.root && plan.components.includes('obsidian-brain')) results.push(await brainInit({ home: values.home || codexHome(), projectKey: plan.config.tools.obsidian.projectKey, execute: true }));
     }
     return { status: results.some((item) => item.status !== 'ok') ? 'partial' : 'ok', actions: results.flatMap((item) => item.actions) };
   } finally { rl.close(); }
@@ -131,22 +141,38 @@ export async function main(argv = process.argv.slice(2)) {
     } else if (command === 'brain' && subcommand === 'configure') {
       if (!values.vault) throw new Error('Use: codex-kit brain configure --vault NAME --yes');
       result = await brainConfigure({ home: values.home || codexHome(), vault: values.vault, execute: shouldApply });
-    } else if (command === 'brain' && ['init', 'status', 'recall', 'remember', 'audit', 'migrate'].includes(subcommand)) {
-      let root;
-      let projectKey;
-      let project;
-      try {
-        project = await projectStatus(values.root || process.cwd());
-        root = project.root;
-        projectKey = project.config?.tools?.obsidian?.projectKey;
-      } catch (error) {
-        if (subcommand !== 'status') throw error;
-      }
+    } else if (command === 'brain' && subcommand === 'projects') result = await brainProjects({ home: values.home || codexHome() });
+    else if (command === 'brain' && subcommand === 'register') result = await registerProject({ home: values.home || codexHome(), root: values.root, project: values.project, name: values.name, externalId: values['external-id'], topics: values.topics?.split(',').map((item) => item.trim()).filter(Boolean), inclusion: values.inclusion, execute: shouldApply });
+    else if (command === 'brain' && subcommand === 'repair') result = await brainRepair({ home: values.home || codexHome(), root: values.root || process.cwd(), scope: values.scope || 'project', execute: shouldApply, expectedHash: values['expected-hash'] });
+    else if (command === 'brain' && subcommand === 'reconcile') {
+      const home = values.home || codexHome();
+      const context = await resolveBrainContext({ home, root: values.root || process.cwd(), project: values.project });
+      const scope = values.scope || (values.project ? 'project' : 'all');
+      if (scope === 'project' && !context.projectKey) throw new Error('Project reconciliation requires a registered project.');
+      result = await brainReconcile({ home, projects: context.registry.projects, projectKey: context.projectKey, scope, execute: shouldApply });
+    } else if (command === 'brain' && ['init', 'status', 'recall', 'read', 'remember', 'audit', 'migrate'].includes(subcommand)) {
+      const home = values.home || codexHome();
+      const context = await resolveBrainContext({ home, root: values.root || process.cwd(), project: values.project });
+      const { root, projectKey, local: project, registry } = context;
       if (subcommand !== 'status' && !projectKey) result = { status: 'partial', actions: [action('recommended', 'initialize project Obsidian configuration', 'codex-kit project init --preset personal --yes')] };
-      else if (subcommand === 'init') result = await brainInit({ home: values.home || codexHome(), projectKey, execute: shouldApply });
+      else if (subcommand === 'init') {
+        if (context.entry && context.entry.inclusion !== 'included') result = { status: 'partial', initialized: false, actions: [action('skipped', 'initialize Brain project', `Project is ${context.entry.inclusion}.`)] };
+        else {
+          if (shouldApply && !context.entry) await brainRegister({ home, key: projectKey, name: root.split(/[\\/]/).pop(), root, kind: 'git', execute: true });
+          result = await brainInit({ home, projectKey, execute: shouldApply });
+          if (!shouldApply) result.actions.push(...(!context.entry ? [action('planned', 'register brain project', projectKey)] : []), action('planned', 'reconcile generated Brain indexes', 'CodexKit/Brain for included work projects'));
+          if (shouldApply && result.initialized) {
+            const index = await brainReconcile({ home, projects: (await loadBrainRegistry({ home })).projects, scope: 'all', execute: true });
+            result = { ...result, status: index.status, indexed: index.status === 'ok', actions: [...result.actions, ...index.actions] };
+          }
+        }
+      }
       else if (subcommand === 'status') result = await brainStatus({ home: values.home || codexHome(), projectKey });
       else if (subcommand === 'migrate') {
+        if (!project?.config) throw new Error('Namespace migration requires a configured Git project.');
         if (!values.to) throw new Error('Use: codex-kit brain migrate --to PROJECT_KEY [--yes]');
+        const rekeyPreview = await brainRekey({ home, fromKey: projectKey, toKey: values.to });
+        if (rekeyPreview.status !== 'ok') { print(rekeyPreview, json); return 1; }
         const preview = await brainMigrate({ home: values.home || codexHome(), fromProjectKey: projectKey, toProjectKey: values.to });
         if (!shouldApply || preview.status !== 'ok') result = preview;
         else {
@@ -159,7 +185,18 @@ export async function main(argv = process.argv.slice(2)) {
           await atomicWrite(configPath, `${JSON.stringify(updatedConfig, null, 2)}\n`);
           try {
             result = await brainMigrate({ home: values.home || codexHome(), fromProjectKey: projectKey, toProjectKey: values.to, execute: true });
-            if (result.status !== 'ok') {
+            if (result.status === 'ok') {
+              try {
+                const rekey = await brainRekey({ home, fromKey: projectKey, toKey: values.to, execute: true });
+                if (rekey.status !== 'ok') result = { ...result, status: 'partial', actions: [...result.actions, ...rekey.actions] };
+                else {
+                  const index = await brainReconcile({ home, projects: (await loadBrainRegistry({ home })).projects, scope: 'all', execute: true });
+                  result = { ...result, status: index.status, indexed: index.status === 'ok', actions: [...result.actions, ...index.actions] };
+                }
+              }
+              catch (error) { result = { ...result, status: 'partial', actions: [...result.actions, action('failed', 'update migrated project registry', error.message)] }; }
+            }
+            if (result.status !== 'ok' && !result.migrated) {
               await atomicWrite(configPath, originalConfig);
               result = { ...result, actions: [...result.actions, action('changed', 'restore local Obsidian project key', 'source project key restored')] };
             }
@@ -169,14 +206,15 @@ export async function main(argv = process.argv.slice(2)) {
           }
         }
       }
-      else if (subcommand === 'recall') result = await brainRecall({ home: values.home || codexHome(), root, projectKey, query: values.query, crossProject: values['cross-project'] });
-      else if (subcommand === 'remember') result = await brainRemember({ home: values.home || codexHome(), root, projectKey, kind: values.kind, title: values.title, summary: values.summary, details: values.details, source: values.source, supersedes: values.supersedes, execute: shouldApply });
+      else if (subcommand === 'recall') result = await brainRecall({ home, root, projectKey, query: values.query, crossProject: values['cross-project'], scope: values.scope || (values['cross-project'] ? 'all' : context.entry?.inclusion === 'included' ? registry.defaultScope : 'project'), projects: registry.projects });
+      else if (subcommand === 'read') result = await brainRead({ home, projectKey, path: values.path });
+      else if (subcommand === 'remember') result = await rememberAndIndex({ home, root, projectKey, kind: values.kind, title: values.title, summary: values.summary, details: values.details, source: values.source, supersedes: values.supersedes, topics: values.topics?.split(',').map((item) => item.trim()).filter(Boolean), execute: shouldApply });
       else result = await brainAudit({ home: values.home || codexHome(), root, projectKey, crossProject: values['cross-project'] });
-    } else if (command === 'context' && subcommand === 'status') result = await contextStatus({ root: values.root || process.cwd(), home: values.home || codexHome() });
+    } else if (command === 'context' && subcommand === 'status') result = await brainAlignment({ root: values.root || process.cwd(), home: values.home || codexHome() });
     else if (command === 'project' && ['init', 'plan', 'apply', 'refresh'].includes(subcommand)) {
       const root = values.root || process.cwd();
       const shouldExecute = ['init', 'refresh', 'apply'].includes(subcommand) && shouldApply;
-      result = await initProject({ root, preset: values.preset || 'developer', execute: shouldExecute, enrich: values.enrich });
+      result = await setupProject({ home: values.home || codexHome(), root, preset: values.preset || 'developer', execute: shouldExecute });
       if (values.enrich) result.enrichment = await enrich(sanitizedInventory({ profiles: result.profiles, components: result.components, graphifyRecommended: result.graphifyRecommended, sourceCount: result.inventory?.sourceCount }));
     } else if (command === 'project' && subcommand === 'status') result = await projectStatus(values.root || process.cwd());
     else if (command === 'component' && ['add', 'remove'].includes(subcommand)) {
@@ -192,7 +230,22 @@ export async function main(argv = process.argv.slice(2)) {
       if (!value || !values.source) throw new Error('Use: codex-kit skill import NAME --source PATH');
       result = await importSkill({ root: values.root || process.cwd(), sourceRoot: values.source, name: value, execute: shouldApply });
     } else if (command === 'diff') result = await projectDiff(await projectPlan({ root: values.root || process.cwd(), preset: values.preset || 'developer' }));
-    else if (command === 'doctor') result = doctor();
+    else if (command === 'upgrade') {
+      if (!values.all) throw new Error('Use upgrade --all to preview registered work-project upgrades.');
+      result = await upgradeAll({ home: values.home || codexHome(), execute: shouldApply, resume: values.resume, expectedHash: values['expected-hash'] });
+    } else if (command === 'doctor') {
+      const home = values.home || codexHome();
+      const prerequisites = doctor();
+      const registry = await loadBrainRegistry({ home });
+      const roots = values.all ? [...new Set(registry.projects.filter((entry) => entry.inclusion === 'included' && entry.root).map((entry) => entry.root))] : [values.root || process.cwd()];
+      const alignment = [];
+      for (const root of roots) {
+        try { alignment.push(await brainAlignment({ home, root })); }
+        catch (error) { alignment.push({ root, status: 'partial', actions: [action('failed', 'inspect alignment', error.message)] }); }
+      }
+      const index = values.all && registry.projects.length ? await brainReconcile({ home, projects: registry.projects, scope: 'all' }) : null;
+      result = { ...prerequisites, status: prerequisites.status !== 'ok' || alignment.some((item) => item.status !== 'ok') || (index && (index.status !== 'ok' || index.actions.some((item) => item.state === 'planned'))) ? 'partial' : 'ok', alignment, ...(index ? { index } : {}), actions: [...prerequisites.actions, ...alignment.flatMap((item) => item.actions), ...(index?.actions || [])] };
+    }
     else if (command === 'history') {
       const root = await findProjectRoot(values.root || process.cwd());
       result = { status: 'ok', transactions: await listTransactions(root), actions: [action('unchanged', 'list transactions')] };
@@ -210,6 +263,7 @@ export async function main(argv = process.argv.slice(2)) {
       result = shouldApply ? await setAllowlistedConfig({ home: values.home || codexHome(), section, key, value: values.value }) : { status: 'ok', actions: [action('planned', 'set allowlisted Codex config', `${section}.${key}`)] };
     } else if (command === 'update' && (!subcommand || subcommand === '--check')) result = await checkUpdates(values['allow-network']);
     else throw new Error(`Unknown command: ${command}`);
+    if (['component', 'add', 'remove'].includes(command) && result.root) result = await finishProjectSetup({ home: values.home || codexHome(), result, execute: shouldApply });
     print(result, json);
     return resultCode(result);
   } catch (error) {

@@ -6,7 +6,15 @@
     "schemaVersion": { "const": 2 },
     "platforms": { "type": "array", "items": { "enum": ["linux", "win32"] } },
     "presets": { "type": "object" },
-    "components": { "type": "object" },
+    "components": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "projectInstructions": { "type": "boolean" }
+        }
+      }
+    },
     "profiles": { "type": "object" }
   }
 }

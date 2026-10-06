@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schemaVersion", "defaultScope", "projects"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "defaultScope": { "const": "related" },
+    "projects": { "type": "array", "items": { "type": "object", "required": ["key", "name", "kind", "root", "roots", "externalId", "topics", "inclusion"], "properties": { "kind": { "enum": ["git", "projectless", "external"] } } } }
+  }
+}

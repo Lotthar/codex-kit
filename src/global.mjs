@@ -32,9 +32,11 @@ function globalAssetsFor(components, manifest) {
   return components.flatMap((component) => (manifest.components[component]?.globalAssets ?? []).map((asset) => safeGlobalAsset({ component, ...asset })));
 }
 
-export async function globalPlan({ preset = 'developer', home = codexHome(), allowNetwork = false, modelRouting = false, memories = false, obsidian = false, catalog = undefined }) {
+export async function globalPlan({ preset = 'developer', home = codexHome(), allowNetwork = false, modelRouting = false, memories = false, obsidian = false, components: selectedComponents, catalog = undefined }) {
   const manifest = await loadManifest();
-  const components = [...new Set([...await presetComponents(preset), ...(modelRouting ? ['model-routing'] : []), ...(obsidian ? ['obsidian-brain'] : [])])];
+  if (selectedComponents !== undefined && (!Array.isArray(selectedComponents) || selectedComponents.some((id) => typeof id !== 'string' || !manifest.components[id]))) throw new Error('Global components must be known component IDs.');
+  const components = [...new Set(selectedComponents ?? [...await presetComponents(preset), ...(modelRouting ? ['model-routing'] : []), ...(obsidian ? ['obsidian-brain'] : [])])]
+    .filter((id) => manifest.components[id].scope.includes('global'));
   const actions = [action('planned', `manage ${join(home, 'AGENTS.md')}`, 'bounded global policy block', { scope: 'global', reversibility: 'full' })];
   const globalAssets = globalAssetsFor(components, manifest);
   for (const asset of globalAssets) actions.push(action('planned', `provision ${asset.target}`, asset.component, { kind: 'global-asset', scope: 'global', reversibility: 'full' }));

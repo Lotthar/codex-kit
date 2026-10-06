@@ -7,10 +7,13 @@
 - Obsidian Project Brain uses the official desktop CLI with argument arrays; Codex Kit does not install Obsidian, execute a custom MCP server, or fall back to unrestricted direct vault writes.
 - The configured vault name is machine-local. Repositories commit only a normalized project key; brain notes remain external to the repository.
 - A project namespace is an organization and retrieval boundary, not a filesystem security boundary. Anyone or any process with vault access can read its notes.
-- Brain recall is project-scoped by default, size- and count-bounded, provenance-labelled, and always treated as untrusted context. Repository code, tests, and `AGENTS.md` remain authoritative.
+- Brain recall is size- and count-bounded, provenance-labelled, and always treated as untrusted context. Related-project retrieval is limited to registry entries explicitly marked `included`; `project` and `all` scopes remain explicit. Repository code, tests, and `AGENTS.md` remain authoritative.
 - Agent capture is parent-only, post-validation, append-only, and limited to durable decisions, lessons, runbooks, and unresolved questions. Existing notes are superseded with a new note rather than overwritten or deleted.
 - Never store credentials, tokens, personal secrets, raw private logs, full transcripts, or source-code dumps in the brain. Review any vault sync provider and sharing policy independently.
 - Transaction rollback never deletes external brain notes. Use Obsidian's normal human review and recovery mechanisms for note changes.
+- Registry metadata is machine-local and validates keys, paths, topics, inclusion state, control characters, and secret-like values. It does not probe or copy project contents.
+- Reconciliation writes only marked `CodexKit/Brain` generated pages after a complete safe scan, preserves original notes, and reports conflicts instead of replacing human edits. Repair of a divergent managed Brain skill requires the previewed hash.
+- Registered-project upgrades are per-target and resumable. They are not globally atomic; receipts identify completed and pending targets.
 - Native Codex memories are experimental, explicit, and separate from Obsidian; enabling one does not change the trust or retention rules of the other.
 - Catalog entries are validated and limited to built-in adapters. Arbitrary executable definitions and remote catalogs are rejected.
 - Skill imports reject symlinks/junctions, special files, sensitive names, VCS data, escaping paths, and files over 1 MiB.

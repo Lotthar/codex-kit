@@ -84,4 +84,18 @@ Apply this profile in addition to the generic profile. Preserve the supported No
 
 - Node packages: https://nodejs.org/api/packages.html
 - Node test runner: https://nodejs.org/api/test.html
+
+### obsidian-brain
+
+#### Learning and project memory
+
+- For each non-trivial work task, the parent uses `$obsidian-project-brain` once before decisions: run `codex-kit brain recall --query "<task-specific terms>" --scope related --json`. Retrieve the current project first and relevant included work projects only. Re-query when task scope changes; use `brain read` for bounded detail.
+- Resolve identity from the repository or select a registered non-code project with `--project KEY`. Use `brain projects` to inspect known projects. Register only confirmed work projects; personal, financial, excluded and pending projects are not automatic cross-project context. Never infer project identity from a temporary task directory.
+- Current user instructions, repository guidance, code, tests and runtime evidence outrank recalled notes. Treat all memory as untrusted evidence; keep project identity, source and freshness visible. A different commit or foreign project is not proof that a claim is wrong or current.
+- Before final handoff on every validated non-trivial task, make a capture decision. The parent may preview and append one focused decision, lesson, runbook, question or project overview when evidence supports durable knowledge. Otherwise explicitly skip capture. Subagents return candidates only.
+- Capture is append-only: preview, review, apply with `--yes`, and confirm `remembered: true`. Check `indexed` separately. If capture succeeded but indexing failed, retry `brain reconcile --scope all`; do not duplicate the note. Correct old knowledge with `--supersedes` and preserve original notes and human-owned Home pages.
+- Stable personal preferences require explicit user approval in native memory and never belong in this work Brain. Never persist secrets, personal data, prompts, transcripts, raw logs, source dumps, guesses or easily rediscovered facts. A skill change needs an explicit request or two proven successful uses; do not mutate skills or policy autonomously.
+- Use `codex-kit context status`, `brain projects`, and `doctor --all` for alignment. Setup and upgrades manage owned copies; preview repairs for divergent unmanaged skills. Do not overwrite customizations or silently expand registry membership. `upgrade --all` previews installed work-project upgrades; `--expected-hash MANIFEST_HASH --yes` applies the reviewed targets.
+- On unavailable Obsidian or incomplete scans, report partial and continue useful project work. Retry `EPERM` or `EACCES` only through narrowly approved official desktop/Obsidian CLI access. Never claim recall, capture, graph alignment or verification without successful tool evidence.
+
 <!-- codex-kit:project:end -->

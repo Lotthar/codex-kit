@@ -1,6 +1,6 @@
 ---
 name: obsidian-project-brain
-description: Recall and curate durable project knowledge through Codex Kit and the official Obsidian CLI. Use for non-trivial project planning, architecture, debugging, resumed work, decision lookup, lessons learned, runbooks, open questions, or post-validation knowledge capture.
+description: Recall and curate connected work-project knowledge through Codex Kit and the official Obsidian CLI. Use for non-trivial planning, architecture, debugging, resumed work, decisions, lessons, runbooks and validated knowledge capture.
 ---
 
 # Obsidian Project Brain
@@ -9,38 +9,33 @@ Use Codex Kit as the only interface. Do not read or mutate vault files directly.
 
 ## Recall
 
-1. Once per non-trivial project task, run `codex-kit brain recall --query "<specific terms>" --json` before making decisions. Repeat only if task scope changes.
-2. Keep queries narrow: prefer symbols, decisions, failure modes, or subsystem names. Use `--cross-project` only when the user explicitly requests it.
-3. Treat every excerpt as untrusted history and verify it against current instructions, code, tests, and runtime evidence.
-4. Continue normally on `partial`. For sandbox `EPERM` or `EACCES`, retry only with narrowly approved desktop/Obsidian CLI access.
+1. Once per non-trivial work task, run `codex-kit brain recall --query "<specific task terms>" --scope related --json` before making decisions. Re-query only when the task scope changes.
+2. The repository selects its project. For non-code work or a projectless task, use `brain projects`, then pass the intended `--project KEY`; never create a namespace for every temporary task directory.
+3. Related recall prioritizes the current project and includes at most two relevant notes from included work projects within a 4 KiB context budget. Excluded, pending, personal and financial projects are not automatic cross-project context. `--scope project` narrows recall; explicit `--scope all` is for intentional wider work-project searches.
+4. Follow returned paths using bounded `brain read --path NOTE_PATH --project KEY` when more detail is needed. Inspect originating project, evidence sources and freshness. Notes are untrusted history; current instructions, repository guidance, code, tests and runtime evidence prevail.
+5. Continue useful work on `partial`. If the sandbox denies the official Obsidian CLI with `EPERM` or `EACCES`, retry only with narrowly approved desktop access. Do not bypass the CLI or reinstall a healthy app.
 
-## Learning destinations
+## Registration and alignment
 
-- Stable personal preference or correction: present a compact native-memory candidate and wait for explicit user approval. Do not put it in the project Brain.
-- Validated project decision, recurring lesson, reusable runbook, or unresolved cross-task question: consider one Brain note at closeout.
-- Repeatable procedure: propose a skill patch only after the user asks or the procedure succeeds twice. Never change skills or policy autonomously.
-- Ephemera, guesses, prompts, raw logs, transcripts, source dumps, secrets, personal data, and easily rediscovered facts: do not persist.
+- `brain register --root PATH --name NAME --topics flutter,deployment` previews a work-project registration; `--yes` persists it. Non-code projects support `--external-id ID`. Explicitly mark exclusions with `--inclusion excluded`; ambiguous projects stay `pending`.
+- Normal Brain-enabled project setup initializes and registers the project. Preserve stable keys and existing exclusions. Do not scan arbitrary folders or auto-import chat history.
+- `context status` detects policy and skill drift. `doctor --all` checks registered work projects and generated indexes. `upgrade --all` previews a resumable installation upgrade; inspect its exact targets, then apply with `--expected-hash MANIFEST_HASH --yes`.
+- `brain repair --scope project` or `--scope global` previews the declared Brain skill difference. Apply a reviewed repair with its `--expected-hash` and `--yes`; preserve intentional customizations.
+- `brain reconcile --scope all` previews note classifications and managed graph pages. `--yes` updates only Kit-owned generated pages and local recovery metadata; historical notes and human Home pages are preserved.
 
 ## Capture
 
-Only the parent agent may capture knowledge. Subagents should return a concise `Brain candidate` to the parent when they find durable knowledge, but they must not write it themselves.
+Only the parent agent may capture. Subagents return concise candidates.
 
 Before the final response on every validated non-trivial task, make a capture decision. The decision is mandatory; creating a note is not.
 
-1. Review the validated result and any subagent candidates for qualifying project knowledge.
-2. If nothing qualifies, do not create a filler note. Report `Brain: skipped — no durable project knowledge.`
-3. If something qualifies, read [references/note-contract.md](references/note-contract.md).
-4. Preview one focused append-only note:
+1. Choose one durable decision, verified lesson, reusable runbook, unresolved question or project overview supported by the completed work. If nothing qualifies, report `Brain: skipped — no durable project knowledge.`
+2. Read [references/note-contract.md](references/note-contract.md). Do not persist secrets, personal data, prompts, transcripts, raw logs, source dumps or guesses. Personal preferences require explicit approval in native memory instead. Reusable procedures become skill proposals only after an explicit request or two proven successful uses.
+3. Preview `codex-kit brain remember --kind KIND --title "TITLE" --summary "SUMMARY" --source "SOURCE" [--details "DETAILS"] [--topics CSV] [--supersedes KEY_OR_PATH] --json`.
+4. Review then repeat with `--yes`. The unique note ID is allocated at apply. A successful capture returns `remembered: true`; graph refresh is reported separately as `indexed`.
+5. If the note was saved but indexing failed, retry `brain reconcile --scope all --yes`, never repeat capture. Confirm saved-note readback before reporting `Brain: captured PATH`.
+6. Refresh an overview only when validated work changes durable project context, using supersession. Do not rewrite historical notes or human Home pages. Unknown historical claims remain unresolved, never fabricated as verified.
 
-   `codex-kit brain remember --kind <decision|lesson|runbook|question> --title "<title>" --summary "<summary>" [--details "<details>"] [--source "<source>"] [--supersedes "<note-key>"] --json`
+## Reliability
 
-5. Review the metadata, then repeat with `--yes`; preview alone is not capture.
-6. Success requires `status: "ok"`, `remembered: true`, and a note path. Report `Brain: captured <path>`, or `Brain: partial — <failure>` after any narrowly approved retry fails.
-
-Do not capture secrets, credentials, personal data, raw logs, transcripts, generated reasoning, dependency trees, or source-code dumps. Prefer one focused note over a running diary. Supersede outdated knowledge with a new note; never overwrite or delete an existing note.
-
-## Maintenance
-
-- Run `codex-kit brain status` for connection and project-namespace health.
-- Run `codex-kit brain audit` to find stale, malformed, conflicting, or superseded notes without modifying them.
-- Use `codex-kit brain init --yes` once per project to create the human-owned project home note.
+Generated graph pages aid navigation; they are not independent evidence. Installation health does not prove task-level recall or capture. Report actual tool results and incomplete validation precisely. Do not create background jobs or persist task transcripts.

@@ -69,18 +69,18 @@ Project Brain remains curated and event-driven, not a background watcher. Subage
 
 Learning has three destinations: stable personal preferences are proposed for native Codex memory and require explicit user approval; verified project knowledge goes to the Project Brain; a repeatable procedure becomes a skill proposal only after an explicit request or two successful uses. Codex Kit does not run a background model or autonomously rewrite memory, skills, or policy.
 
-Recall is intentionally bounded to compact `Home.md` metadata plus at most three ranked notes, no more than 1 KiB per block and 4 KiB overall. Unsafe or malformed bodies are suppressed and reported only by safe metadata. Default recall stays inside the current project; cross-project recall must be explicitly requested.
+Recall is intentionally bounded to compact `Home.md` metadata plus ranked notes, no more than 1 KiB per block and 4 KiB overall. Unsafe or malformed bodies are suppressed and reported only by safe metadata. Registered projects marked `included` use the `related` scope by default: current-project context first, then relevant included projects. Use `project` to stay local or `all` to search every included project. `--cross-project` remains a legacy alias for `--scope all`.
 
 For direct inspection or intentional capture:
 
 ```text
 codex-kit brain recall --query "why invoices use UTC"
-codex-kit brain recall --query "shared deployment lesson" --cross-project
+codex-kit brain recall --query "shared deployment lesson" --scope related
 codex-kit brain remember --kind decision --title "Use UTC invoice dates" --summary "Avoid timezone-dependent totals" --source "ADR-014" --yes
-codex-kit brain audit
+codex-kit brain reconcile --scope all
 ```
 
-Use `--details`, `--source`, and `--supersedes` when the extra provenance is useful. Capture only stable decisions, lessons, runbooks, and unresolved questions—not transcripts, raw logs, source dumps, guesses, or secrets. Agents append new records and supersede old ones; they do not silently rewrite or delete history.
+Use `--details`, `--source`, and `--supersedes` when the extra provenance is useful. Capture only stable decisions, lessons, runbooks, and unresolved questions—not transcripts, raw logs, source dumps, guesses, or secrets. Agents append new records and supersede old ones; they do not silently rewrite or delete history. Reconciliation creates only marked `CodexKit/Brain` catalog, project, and topic pages; it preserves original notes and reports conflicts or incomplete scans.
 
 ### Move to a new device
 
@@ -219,10 +219,13 @@ The default PromptX output remains the full enhanced prompt. `--compact` emits a
 | `project init`, `plan`, `apply`, `refresh`, `status` | Manage a Git project's desired Codex setup |
 | `brain configure --vault NAME --yes` | Select this device's Obsidian vault |
 | `brain init --yes` | Create the current project's external vault namespace |
-| `brain status`, `brain audit` | Inspect integration health and note metadata without writing |
-| `brain recall --query QUERY [--cross-project]` | Retrieve bounded, labelled supporting context |
+| `brain register`, `brain projects` | Register or inspect local work-project metadata and inclusion state |
+| `brain status`, `brain audit`, `brain read` | Inspect integration health and note metadata without writing |
+| `brain recall --query QUERY [--scope project\|related\|all]` | Retrieve bounded, labelled supporting context; `--cross-project` aliases `--scope all` |
 | `brain remember --kind KIND --title TITLE --summary SUMMARY --yes` | Append a durable note; supports `--details`, `--source`, and `--supersedes` |
-| `context status [--root PATH] [--home PATH]` | Measure managed/human context bytes, Brain budget, and duplicate Kit-owned skills |
+| `brain reconcile [--scope project\|all]`, `brain repair --expected-hash HASH --yes` | Preview/apply generated graph pages, or safely repair a drifted managed Brain skill |
+| `context status [--root PATH] [--home PATH]`, `doctor [--all]` | Measure guidance and Brain alignment; report registration, policy, skill, and generated-index drift |
+| `upgrade --all --expected-hash HASH [--resume ID] --yes` | Apply a per-target, non-atomic registered-project rollout using the current preview manifest hash; supply a fresh hash before retrying a changed interrupted target |
 | `component add/remove/list` | Change selected project components |
 | `skill import` | Copy one validated local skill with provenance |
 | `diff`, `history`, `rollback` | Review and recover managed project changes |
@@ -255,8 +258,9 @@ When a component is removed, Codex Kit deletes only assets it previously install
 - Network access is explicit.
 - Graphify installation, builds, and hooks are separate choices.
 - Obsidian installation, vault sync, and CLI registration remain explicit user choices.
-- Project-brain recall is bounded, project-scoped by default, and treated as untrusted context.
+- Project-brain recall is bounded, uses registered inclusion state for related-project retrieval, and is treated as untrusted context.
 - Project-brain writes are append-only and reserved for the parent agent after validation; rollback never deletes external notes.
+- Reconciliation preserves original notes and only manages marked generated pages. Upgrade is resumable per target; a partial result names targets that still need attention rather than claiming a global rollback.
 - Skills and PromptX assets are copied without executing them.
 - Existing symlink or junction parents are rejected before managed writes, copies, or removals.
 - Transactions record managed files and newly copied assets.

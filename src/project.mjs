@@ -53,6 +53,13 @@ async function projectAssets(components, config) {
   });
 }
 
+async function projectComponentInstructions(components) {
+  const { manifest } = await validateCatalog();
+  return Promise.all(components
+    .filter((id) => manifest.components[id]?.projectInstructions)
+    .map(async (id) => ({ id, text: await readFile(join(kitRoot, manifest.components[id].source), 'utf8') })));
+}
+
 export async function projectPlan({ root, preset = 'developer', requestedConfig }) {
   const projectRoot = await findProjectRoot(root);
   const config = requestedConfig ?? await desiredConfig(projectRoot, preset);
@@ -65,7 +72,7 @@ export async function projectPlan({ root, preset = 'developer', requestedConfig 
     if (key) config.tools.obsidian.projectKey = key;
     else delete config.tools.obsidian.projectKey;
   }
-  const instructions = await profileInstructions(profiles);
+  const instructions = [...await profileInstructions(profiles), ...await projectComponentInstructions(components)];
   const assets = await projectAssets(components, config);
   const actions = [
     action('planned', 'detect project profiles', profiles.join(', ')),
@@ -80,8 +87,9 @@ export async function projectPlan({ root, preset = 'developer', requestedConfig 
   return { status: detection.frameworkConflict ? 'conflict' : 'ok', project: await projectName(projectRoot), root: projectRoot, config, profiles, components, instructions, assets, graphifyRecommended: detection.graphifyRecommended, actions };
 }
 
-export async function applyProject(plan) {
+export async function applyProject(plan, { assetComponents } = {}) {
   if (plan.status === 'conflict') return plan;
+  if (assetComponents !== undefined && (!Array.isArray(assetComponents) || assetComponents.some((component) => typeof component !== 'string'))) throw new Error('Asset components must be a list of component IDs.');
   if (plan.components.includes('obsidian-brain') && !plan.config.tools?.obsidian?.projectKey) {
     plan.config.tools ??= {};
     plan.config.tools.obsidian ??= {};
@@ -93,14 +101,16 @@ export async function applyProject(plan) {
     try {
       const previousState = await readJson(statePath(plan.root), { assets: [] });
       const previousAssets = new Map((previousState.assets ?? []).map((asset) => [asset.target, asset]));
+      const allowedComponents = assetComponents ? new Set(assetComponents) : null;
       const agentsPath = join(plan.root, 'AGENTS.md');
       const original = exists(agentsPath) ? await readFile(agentsPath, 'utf8') : '';
       const block = renderManagedBlock({ profiles: plan.profiles, components: plan.components, instructions: plan.instructions });
       await writeTracked(transaction, agentsPath, mergeManagedBlock(original, block));
       await writeTracked(transaction, configPath(plan.root), `${JSON.stringify(plan.config, null, 2)}\n`);
-      const installedAssets = [];
+      const installedAssets = allowedComponents ? (previousState.assets ?? []).filter((asset) => !allowedComponents.has(asset.component)) : [];
       const assetActions = [];
-      for (const asset of plan.assets ?? await projectAssets(plan.components, plan.config)) {
+      const assets = (plan.assets ?? await projectAssets(plan.components, plan.config)).filter((asset) => !allowedComponents || allowedComponents.has(asset.component));
+      for (const asset of assets) {
         const source = join(kitRoot, asset.source);
         const destination = join(plan.root, asset.target);
         const sourceHash = await pathHash(source);
@@ -125,8 +135,8 @@ export async function applyProject(plan) {
         installedAssets.push({ component: asset.component, target: asset.target, hash: sourceHash });
         assetActions.push(action('changed', `provision ${asset.target}`, asset.component));
       }
-      const desiredTargets = new Set((plan.assets ?? []).map((asset) => asset.target));
-      for (const previous of previousAssets.values()) if (!desiredTargets.has(previous.target)) {
+      const desiredTargets = new Set(assets.map((asset) => asset.target));
+      for (const previous of previousAssets.values()) if ((!allowedComponents || allowedComponents.has(previous.component)) && !desiredTargets.has(previous.target)) {
         const destination = join(plan.root, previous.target);
         if (!exists(destination)) continue;
         if (await pathHash(destination) !== previous.hash) {

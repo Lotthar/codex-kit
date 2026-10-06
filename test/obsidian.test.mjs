@@ -9,10 +9,14 @@ import {
   brainConfigPath,
   brainConfigure,
   brainInit,
+  brainRead,
   brainMigrate,
   brainRecall,
   brainRemember,
+  brainSnapshot,
+  openBrainVault,
   brainStatus,
+  brainTopicSlug,
   deriveProjectKey,
   projectKey,
 } from '../src/obsidian.mjs';
@@ -355,6 +359,17 @@ test('rejects secrets, oversized payloads, and unsafe supersedes before CLI muta
   assert.equal(fake.calls.length, 0);
 });
 
+test('overview memories link to their project Home and untruncated normalized topic paths', async () => {
+  const home = await configuredHome();
+  const fake = fakeObsidian();
+  const topic = `Životni ciklus ${'very long topic '.repeat(6)}`;
+  const receipt = await brainRemember({ home, projectKey: PROJECT, kind: 'overview', title: 'Project overview', summary: 'Current project context.', source: 'test:overview', topics: [topic], execute: true, runner: fake.runner, idFactory: () => '12345678-1234-1234-1234-123456789abc' });
+  const content = fake.notes.get(receipt.path);
+  assert.match(content, new RegExp(`\\[\\[Projects/${PROJECT}/Home\\|Home\\]\\]`));
+  assert.match(content, new RegExp(`\\[\\[CodexKit/Brain/Topics/${brainTopicSlug(topic)}\\|`));
+  assert.equal(brainTopicSlug(topic).length > 60, true);
+});
+
 test('recall is project-scoped by default, explicitly cross-project, and byte bounded', async () => {
   const home = await configuredHome();
   const notes = { [HOME]: `# Home\n\nneedle ${'🙂'.repeat(900)}` };
@@ -384,7 +399,7 @@ test('recall ranks exact source-backed current memories after resolving superses
     [exact]: memory({ key: 'lesson-3333333333333333', sources: ['test:launch'], body: '# Exact launch guide\n\nlaunch guide verified' }),
   });
   const result = await brainRecall({ home, root: '/repo', projectKey: PROJECT, query: 'launch guide', runner: fake.runner, gitRunner: gitRunner() });
-  assert.deepEqual(result.notes.map((item) => item.path), [exact, replacement]);
+  assert.deepEqual(result.notes.map((item) => item.path), [exact]);
   assert.doesNotMatch(result.context, /legacy/);
   assert.match(result.context, /title: Memory/);
   assert.match(result.context, /provenance: test:launch/);
@@ -513,4 +528,196 @@ test('missing vault is a partial state for initialization', async () => {
   assert.equal(result.status, 'partial');
   assert.equal(result.initialized, false);
   assert.doesNotMatch(JSON.stringify(result), /Codex Brain/);
+});
+
+test('related recall uses included registry projects, source-backed foreign notes, and unverified foreign freshness', async () => {
+  const home = await configuredHome();
+  const other = 'other-project-1234567890';
+  const fake = fakeObsidian({
+    [HOME]: '# Home\n\nCurrent project',
+    [`Projects/${PROJECT}/Lessons/local.md`]: memory({ key: 'lesson-1111111111111111', body: 'release workflow detail' }),
+    [`Projects/${other}/Home.md`]: memory({ project: other, kind: 'home', key: 'home', body: 'Other home' }),
+    [`Projects/${other}/Lessons/foreign.md`]: memory({ project: other, key: 'lesson-2222222222222222', commit: 'b'.repeat(40), body: 'release workflow foreign detail' }),
+    [`Projects/${other}/Lessons/unsourced.md`]: memory({ project: other, key: 'lesson-3333333333333333', sources: [], body: 'release workflow unsourced' }),
+  });
+  const result = await brainRecall({
+    home, root: '/repo', projectKey: PROJECT, query: 'release workflow', scope: 'related',
+    projects: [{ key: other, included: true, type: 'work' }], runner: fake.runner, gitRunner: gitRunner(),
+  });
+  assert.equal(result.scope, 'related');
+  assert.equal(result.crossProject, true);
+  assert.deepEqual(result.notes.map((item) => item.path), [`Projects/${PROJECT}/Lessons/local.md`, `Projects/${other}/Lessons/foreign.md`]);
+  assert.match(result.context, /freshness=unverified/);
+  assert.doesNotMatch(result.context, /unsourced/);
+});
+
+test('snapshot classifies records without exposing note bodies and vault adapter confines generated writes', async () => {
+  const home = await configuredHome();
+  const valid = `Projects/${PROJECT}/Lessons/valid.md`;
+  const secret = `Projects/${PROJECT}/Lessons/secret.md`;
+  const invalidTopics = `Projects/${PROJECT}/Lessons/invalid-topics.md`;
+  const fake = fakeObsidian({
+    [HOME]: '# Home',
+    [valid]: memory({ key: 'lesson-1111111111111111', body: 'safe body stays private' }).replace('supersedes:', 'topics: ["flutter"]\nsupersedes:'),
+    [secret]: memory({ key: 'lesson-2222222222222222', body: `sk-${'a'.repeat(24)}` }),
+    [invalidTopics]: memory({ key: 'lesson-3333333333333333' }).replace('supersedes:', 'topics: "not-an-array"\nsupersedes:'),
+  });
+  const snapshot = await brainSnapshot({ home, runner: fake.runner });
+  assert.equal(snapshot.complete, true);
+  assert.equal(snapshot.records.find((item) => item.path === valid).classification, 'valid');
+  assert.deepEqual(snapshot.records.find((item) => item.path === valid).topics, ['flutter']);
+  assert.equal(snapshot.records.find((item) => item.path === secret).classification, 'unsafe');
+  assert.equal(snapshot.records.find((item) => item.path === invalidTopics).classification, 'malformed');
+  assert.doesNotMatch(JSON.stringify(snapshot), /sk-/);
+  const vault = await openBrainVault({ home, runner: fake.runner });
+  assert.equal((await vault.writeGenerated('CodexKit/Brain/Topics/flutter.md', '# Flutter\n\nTopic index')).status, 0);
+  assert.equal((await vault.writeGenerated('Projects/x.md', '# no')).status, 1);
+  await assert.rejects(() => brainRead({ home, projectKey: PROJECT, path: '../escape.md', runner: fake.runner }), /Unsafe/);
+  fake.notes.delete(secret);
+  fake.notes.delete(invalidTopics);
+  const read = await brainRead({ home, projectKey: PROJECT, path: valid, runner: fake.runner });
+  assert.equal(read.status, 'ok');
+  assert.deepEqual(read.topics, ['flutter']);
+  assert.match(read.excerpt, /safe body/);
+});
+
+test('all scope filters pending and excluded registry projects but legacy cross-project remains broad', async () => {
+  const home = await configuredHome();
+  const pending = 'pending-project-1234567890';
+  const excluded = 'excluded-project-1234567890';
+  const fake = fakeObsidian({
+    [HOME]: '# Home',
+    [`Projects/${PROJECT}/Lessons/local.md`]: memory({ key: 'lesson-1111111111111111', body: 'registry boundary' }),
+    [`Projects/${pending}/Lessons/pending.md`]: memory({ project: pending, key: 'lesson-2222222222222222', body: 'registry boundary pending' }),
+    [`Projects/${excluded}/Lessons/excluded.md`]: memory({ project: excluded, key: 'lesson-3333333333333333', body: 'registry boundary excluded' }),
+  });
+  const filtered = await brainRecall({ home, projectKey: PROJECT, query: 'registry boundary', scope: 'all', projects: [{ key: pending, inclusion: 'pending' }, { key: excluded, inclusion: 'excluded' }], runner: fake.runner });
+  assert.deepEqual(filtered.notes.map((item) => item.project), [PROJECT]);
+  const legacy = await brainRecall({ home, projectKey: PROJECT, query: 'registry boundary pending', crossProject: true, runner: fake.runner });
+  assert.equal(legacy.notes[0].project, pending);
+});
+
+test('related recall excludes question and unsourced records', async () => {
+  const home = await configuredHome();
+  const fake = fakeObsidian({
+    [HOME]: '# Home',
+    [`Projects/${PROJECT}/Questions/question.md`]: memory({ kind: 'question', key: 'question-111111111111111', body: 'open migration decision' }),
+    [`Projects/${PROJECT}/Lessons/unsourced.md`]: memory({ key: 'lesson-2222222222222222', sources: [], body: 'open migration decision' }),
+  });
+  const result = await brainRecall({ home, projectKey: PROJECT, query: 'open migration', scope: 'related', projects: [], runner: fake.runner });
+  assert.deepEqual(result.notes, []);
+});
+
+test('recall suppresses dangling supersession targets', async () => {
+  const home = await configuredHome();
+  const path = `Projects/${PROJECT}/Lessons/dangling.md`;
+  const fake = fakeObsidian({ [HOME]: '# Home', [path]: memory({ key: 'lesson-1111111111111111', supersedes: 'lesson-missing0000000', body: 'dangling target' }) });
+  const result = await brainRecall({ home, projectKey: PROJECT, query: 'dangling target', runner: fake.runner });
+  assert.deepEqual(result.notes, []);
+  assert.equal(result.suppressed.some((item) => item.reason === 'dangling-supersedes'), true);
+});
+
+test('snapshot marks every duplicate key malformed', async () => {
+  const home = await configuredHome();
+  const fake = fakeObsidian({
+    [HOME]: '# Home',
+    [`Projects/${PROJECT}/Lessons/a.md`]: memory({ key: 'lesson-1111111111111111' }),
+    [`Projects/${PROJECT}/Lessons/b.md`]: memory({ key: 'lesson-1111111111111111' }),
+  });
+  const snapshot = await brainSnapshot({ home, runner: fake.runner });
+  assert.deepEqual(snapshot.records.filter((item) => item.path.endsWith('/a.md') || item.path.endsWith('/b.md')).map((item) => item.classification), ['malformed', 'malformed']);
+});
+
+test('snapshot marks arbitrary supersession cycles malformed', async () => {
+  const home = await configuredHome();
+  const keys = ['lesson-1111111111111111', 'lesson-2222222222222222', 'lesson-3333333333333333'];
+  const fake = fakeObsidian({
+    [HOME]: '# Home',
+    [`Projects/${PROJECT}/Lessons/a.md`]: memory({ key: keys[0], supersedes: keys[2] }),
+    [`Projects/${PROJECT}/Lessons/b.md`]: memory({ key: keys[1], supersedes: keys[0] }),
+    [`Projects/${PROJECT}/Lessons/c.md`]: memory({ key: keys[2], supersedes: keys[1] }),
+  });
+  const snapshot = await brainSnapshot({ home, runner: fake.runner });
+  assert.equal(snapshot.records.filter((item) => item.path.includes('/Lessons/')).every((item) => item.classification === 'malformed'), true);
+});
+
+test('same memory keys in different projects cannot supersede each other', async () => {
+  const home = await configuredHome();
+  const other = 'other-project-1234567890';
+  const key = 'lesson-1111111111111111';
+  const fake = fakeObsidian({
+    [HOME]: '# Home',
+    [`Projects/${PROJECT}/Lessons/local.md`]: memory({ key, body: 'shared key evidence' }),
+    [`Projects/${other}/Lessons/other.md`]: memory({ project: other, key: 'lesson-2222222222222222', supersedes: key, body: 'shared key evidence' }),
+  });
+  const result = await brainRecall({ home, projectKey: PROJECT, query: 'shared key evidence', scope: 'all', projects: [{ key: other, inclusion: 'included' }], runner: fake.runner });
+  assert.equal(result.notes.some((item) => item.path.endsWith('/local.md')), true);
+});
+
+test('recall ranks detail-only matches and omits unrelated no-hit candidates', async () => {
+  const home = await configuredHome();
+  const fake = fakeObsidian({
+    [HOME]: '# Home',
+    [`Projects/${PROJECT}/Lessons/detail.md`]: memory({ key: 'lesson-1111111111111111', body: '# Generic\n\nGeneral summary\n\n## Details\n\nunique detail phrase' }),
+    [`Projects/${PROJECT}/Lessons/other.md`]: memory({ key: 'lesson-2222222222222222', body: 'unrelated history' }),
+  });
+  const hit = await brainRecall({ home, projectKey: PROJECT, query: 'unique detail', runner: fake.runner });
+  assert.deepEqual(hit.notes.map((item) => item.path), [`Projects/${PROJECT}/Lessons/detail.md`]);
+  const miss = await brainRecall({ home, projectKey: PROJECT, query: 'absent vocabulary', runner: fake.runner });
+  assert.deepEqual(miss.notes, []);
+});
+
+test('automatic project and all recall omit unsourced memories', async () => {
+  const home = await configuredHome();
+  const other = 'other-project-1234567890';
+  const fake = fakeObsidian({
+    [HOME]: '# Home',
+    [`Projects/${PROJECT}/Lessons/local.md`]: memory({ key: 'lesson-1111111111111111', sources: [], body: 'unverified phrase' }),
+    [`Projects/${other}/Lessons/other.md`]: memory({ project: other, key: 'lesson-2222222222222222', sources: [], body: 'unverified phrase' }),
+  });
+  const local = await brainRecall({ home, projectKey: PROJECT, query: 'unverified phrase', runner: fake.runner });
+  const all = await brainRecall({ home, projectKey: PROJECT, query: 'unverified phrase', scope: 'all', projects: [{ key: other, inclusion: 'included' }], runner: fake.runner });
+  assert.deepEqual(local.notes, []);
+  assert.deepEqual(all.notes, []);
+});
+
+test('bounded namespace scans return partial without automatic context', async () => {
+  const home = await configuredHome();
+  const notes = { [HOME]: '# Home' };
+  for (let index = 0; index <= 2_000; index += 1) notes[`Projects/${PROJECT}/Lessons/${index}.md`] = memory({ key: `lesson-${String(index).padStart(16, '0')}`, body: 'bounded scan phrase' });
+  const result = await brainRecall({ home, projectKey: PROJECT, query: 'bounded scan', runner: fakeObsidian(notes).runner });
+  assert.equal(result.status, 'partial');
+  assert.equal(result.context, '');
+  assert.deepEqual(result.notes, []);
+});
+
+test('related recall allows at most two foreign context blocks and omits foreign homes', async () => {
+  const home = await configuredHome();
+  const other = 'other-project-1234567890';
+  const fake = fakeObsidian({
+    [HOME]: '# Home',
+    [`Projects/${other}/Home.md`]: memory({ project: other, kind: 'home', key: 'home', body: 'foreign boundary topic' }),
+    [`Projects/${other}/Lessons/a.md`]: memory({ project: other, key: 'lesson-1111111111111111', body: 'foreign boundary topic one' }),
+    [`Projects/${other}/Lessons/b.md`]: memory({ project: other, key: 'lesson-2222222222222222', body: 'foreign boundary topic two' }),
+  });
+  const result = await brainRecall({ home, projectKey: PROJECT, query: 'foreign boundary', scope: 'related', projects: [{ key: other, inclusion: 'included' }], runner: fake.runner });
+  assert.equal(result.notes.filter((item) => item.project === other).length, 2);
+  assert.doesNotMatch(result.context, new RegExp(`Projects/${other}/Home\\.md`));
+});
+
+test('recall labels a local note with unavailable revision evidence as unverified', async () => {
+  const home = await configuredHome();
+  const path = `Projects/${PROJECT}/Lessons/no-revision.md`;
+  const fake = fakeObsidian({ [HOME]: '# Home', [path]: memory({ commit: '', body: 'needle evidence without revision' }) });
+  const result = await brainRecall({ home, projectKey: PROJECT, query: 'needle', runner: fake.runner, gitRunner: gitRunner() });
+  assert.equal(result.status, 'ok');
+  assert.equal(result.notes[0].freshness, 'unverified');
+  assert.match(result.context, /freshness=unverified/);
+});
+
+test('bounded read preserves the adapter failure needed to diagnose desktop access', async () => {
+  const home = await configuredHome();
+  const result = await brainRead({ home, projectKey: PROJECT, path: `Projects/${PROJECT}/Lessons/safe.md`, runner: async () => ({ status: 1, stderr: 'EACCES desktop socket' }) });
+  assert.equal(result.status, 'partial');
+  assert.match(JSON.stringify(result.actions), /EACCES/);
 });

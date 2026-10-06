@@ -1,23 +1,19 @@
 # Note contract
 
-## Kinds and intent
+## Kinds
 
-- `decision`: a chosen approach, constraints, and the reason alternatives were rejected.
-- `lesson`: a verified failure mode, invariant, or technique likely to recur.
-- `runbook`: a short repeatable operational or diagnostic procedure.
-- `question`: an unresolved issue that should remain visible to future work.
+- `decision`: chosen approach, constraints and reasons.
+- `lesson`: verified failure mode, invariant or reusable technique.
+- `runbook`: concise repeatable operational procedure.
+- `question`: unresolved issue, explicitly not an established fact.
+- `overview`: current project purpose, architecture or workflow, durable constraints and source references. Supersede an older overview rather than rewriting it.
 
-## Required quality
+Titles and summaries must stand alone. Include actual evidence sources and distinguish verified facts from hypotheses. Keep details concise and link to source-of-truth files instead of copying them. A Git commit is provenance, not universal proof of freshness.
 
-- Make the title specific and the summary independently useful.
-- Record only facts supported by current evidence.
-- Include a Git commit or another stable source when available.
-- Separate verified facts from hypotheses.
-- Keep details concise and durable; link to source-of-truth files instead of copying them.
-- Use `supersedes` when new evidence replaces an older note.
+Codex Kit writes flat metadata for project, kind, key, active status, creation time, verified commit, sources, supersedes, author, and optional topics. Notes are uniquely named append-only Markdown under `Projects/<key>/<Kind>/`. New notes link to their project Home and declared topic pages. Historical notes and human Home pages remain unchanged.
 
-Codex Kit writes flat YAML metadata for `codex_brain`, `project`, `kind`, `key`, `status`, `created`, `verified_commit`, `sources`, `supersedes`, and `author`. It creates a unique append-only Markdown note under `Projects/<projectKey>/<Kind>/` and returns a redacted receipt without the body.
+Use `supersedes` for an evidence-backed correction, including a same-project legacy note path. Unknown or missing sources stay unverified. Unresolved questions and ambiguous supersession must not be presented as settled knowledge.
 
-A dry-run reports the destination pattern. The mutating run allocates the final timestamp and unique ID so two captures can never target the same note.
+Generated catalog, project and topic pages live under `CodexKit/Brain/`, outside the original note namespace. They contain navigation/classification data and are managed by reconciliation with ownership hashes. They are not independent evidence. Receipts contain safe metadata and hashes, never original note bodies.
 
-The project namespace is a default retrieval boundary, not an operating-system security boundary. The user controls the whole vault. Never place credentials, tokens, secrets, private logs, or sensitive personal information in it.
+Project namespaces and inclusion settings are retrieval boundaries, not operating-system access controls. Personal/financial projects are excluded from automatic work context. Never put credentials, personal data or private logs in the Brain.
