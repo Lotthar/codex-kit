@@ -13,6 +13,9 @@
 
 ## Unreleased
 
+- Added opt-in global REA setup/status/remove commands, a version-matched upstream investigation skill, and a plan-before-implementation feature adaptation policy.
+- Added a checksum-locked private Node/JDK/Ghidra/JADX toolchain, offline previews, exact asset ownership, and scoped removal that preserves unrelated configuration and investigation evidence.
+
 - Added read-only `context status` diagnostics for global/project `AGENTS.md` byte accounting, the Brain recall budget, and duplicate Kit-owned skill names.
 - Reduced always-loaded profile guidance and added managed static-context budgets without estimating tokens or quota savings.
 - Added PromptX `--compact` for deterministic, redacted task packets capped at 3 KiB while retaining the existing full output by default.

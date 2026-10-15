@@ -6,7 +6,7 @@ Codex Kit turns an existing Git project into a reproducible Codex workspace. It 
 
 | Scope | Managed setup |
 | --- | --- |
-| Global Codex home | Bounded policy block, Ponytail plugin, Ruflo MCP, optional Obsidian Project Brain skill |
+| Global Codex home | Bounded policy block, Ponytail plugin, Ruflo MCP, optional Obsidian Project Brain skill and REA integration |
 | Git project | Detected profiles, bounded `AGENTS.md` block, workflow/quality skills, PromptX, optional Graphify adapter, stable brain project key |
 | Personal Obsidian vault | External, project-namespaced decisions, lessons, runbooks, and open questions |
 
@@ -142,6 +142,35 @@ The wizard always presents these recommendations:
 
 Declining network access leaves Ponytail and Ruflo as visible follow-up recommendations. Codex Kit never installs Obsidian itself, never performs network-backed plugin or MCP installation without explicit consent, and never runs Graphify implicitly.
 
+## Reverse engineer and adapt a feature with REA
+
+REA is an optional global integration: install it once, then use `$reverse-engineer-anything` from any local Codex project. Its MCP server and complete upstream skill come from the same pinned release. The initial Linux x64 toolchain includes private Node 24, JDK 21, Ghidra, and the JADX headless MCP bridge; existing Chrome, ADB, `ps`, and `objdump` are reused. Python 3.12 or newer is required for safe archive extraction. Default Node/Java installations and other MCP registrations are preserved.
+
+```text
+codex-kit rea setup --json                        # offline preview; no changes
+codex-kit rea setup --allow-network --yes --json   # install the reviewed toolchain
+codex-kit rea status --json                       # inspect ownership and installed files
+codex-kit rea remove --json                       # preview removal
+codex-kit rea remove --yes --json                 # remove only unchanged owned assets
+```
+
+Restart or reconnect Codex after installation, confirm that the REA tools are available, then ask for the feature you want:
+
+```text
+Use $reverse-engineer-anything to understand search in /absolute/path/example.apk.
+Show the evidence and plan an equivalent feature for this project.
+
+Inspect this Electron app's offline queue, then plan how to adapt it to my Flutter app.
+```
+
+The default workflow investigates, explains evidence and limitations, and proposes a destination-specific implementation plan before edits. An explicit request for immediate implementation authorizes the normal implementation workflow. When source code is available, use ordinary repository tools first. Recovered pseudocode does not guarantee original source, complete Flutter/Dart recovery, or knowledge of a remote backend. Reuse code/assets only where ownership or licensing allows; otherwise implement the behavior independently.
+
+For website inspection, use a separate Chrome debugging profile and a loopback CDP endpoint. Passive attachment and action-driven browser scenarios have different effects; request the actions the investigation needs. Device installation, file transfers, and other runtime effects require task authorization. Analyses run locally, while results provided to Codex enter its model context. Keep credentials out of captures and select a local directory when exporting evidence.
+
+The skill is installed once in `~/.agents/skills/reverse-engineer-anything`; private runtimes and the installation receipt live under the Codex home. Shared skill changes also keep recovery receipts under `~/.codex-kit/transactions`. `--home PATH` isolates the REA setup, including its `.agents` skill directory, beneath that path for testing. Setup and removal preserve colliding or modified user files and report conflicts. Removal moves the unchanged installation into transaction backups, retaining investigation evidence, download caches, and recovery receipts. Do not use REA's broad `uninstall` command for this Kit-owned registration.
+
+Updates require a reviewed change to `catalog/rea.lock.json` followed by the same preview/apply setup commands. Setup never uses `latest`, and normal MCP startup needs no package download. `rea status` reports file/ownership readiness; a live MCP call after reconnection is separate verification. See [REA installation](https://github.com/morluto/rea/blob/main/docs/installation.md) for upstream capabilities and [REA's license](https://github.com/morluto/rea/blob/main/LICENSE) for tool terms.
+
 ## Optional dynamic model routing
 
 Model routing is global and opt-in: it never changes a repository's configuration or your existing global default model. Enable the global policy and roles once, then inspect or refresh the role selections:
@@ -225,6 +254,7 @@ The default PromptX output remains the full enhanced prompt. `--compact` emits a
 | `brain remember --kind KIND --title TITLE --summary SUMMARY --yes` | Append a durable note; supports `--details`, `--source`, and `--supersedes` |
 | `brain reconcile [--scope project\|all]`, `brain repair --expected-hash HASH --yes` | Preview/apply generated graph pages, or safely repair a drifted managed Brain skill |
 | `context status [--root PATH] [--home PATH]`, `doctor [--all]` | Measure guidance and Brain alignment; report registration, policy, skill, and generated-index drift |
+| `rea setup`, `rea status`, `rea remove` | Preview/install the private global REA toolchain, inspect ownership, or remove unchanged owned assets |
 | `upgrade --all --expected-hash HASH [--resume ID] --yes` | Apply a per-target, non-atomic registered-project rollout using the current preview manifest hash; supply a fresh hash before retrying a changed interrupted target |
 | `component add/remove/list` | Change selected project components |
 | `skill import` | Copy one validated local skill with provenance |

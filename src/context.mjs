@@ -27,7 +27,7 @@ function managedBytes(text, scope) {
 async function agentFile(path, scope) {
   const result = await readOptional(path);
   const totalBytes = bytes(result.text);
-  const kitManagedBytes = managedBytes(result.text, scope);
+  const kitManagedBytes = managedBytes(result.text, scope) + (scope === 'global' ? managedBytes(result.text, 'rea') : 0);
   const details = {
     path,
     exists: result.exists,

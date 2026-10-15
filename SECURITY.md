@@ -4,6 +4,9 @@
 - Managed `AGENTS.md` blocks have bounded markers; incomplete or duplicate blocks fail without writing.
 - Plans are previewed before application. File changes are journaled with hashes and backups under transaction receipts.
 - Plugin and MCP changes are external actions: they are verified, recorded, and only best-effort reversible.
+- REA is an explicit global opt-in. Its setup previews offline; executable downloads require both `--allow-network` and `--yes`. Private, pinned Node/JDK/Ghidra/JADX artifacts are checksum-verified before safe extraction; ordinary MCP startup performs no package resolution.
+- REA's exact MCP block, policy, skill, and toolchain are owned by dedicated hashes and receipts. Setup/removal preserve other config bytes and customized or unowned assets. Removal retains investigation evidence/caches and never calls upstream's multi-client uninstall. File readiness does not prove a live Codex MCP connection.
+- REA target content is untrusted data. Runtime/device/browser operations remain bounded by the requested target and authorized actions. Local analysis results sent to Codex enter model context; use focused results, separate debugging browser profiles, and credential-free captures.
 - Obsidian Project Brain uses the official desktop CLI with argument arrays; Codex Kit does not install Obsidian, execute a custom MCP server, or fall back to unrestricted direct vault writes.
 - The configured vault name is machine-local. Repositories commit only a normalized project key; brain notes remain external to the repository.
 - A project namespace is an organization and retrieval boundary, not a filesystem security boundary. Anyone or any process with vault access can read its notes.

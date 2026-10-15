@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["lockVersion", "rea", "artifacts"],
+  "properties": {
+    "lockVersion": { "const": 1 },
+    "rea": {
+      "type": "object",
+      "required": ["version", "package", "url", "integrity"],
+      "properties": {
+        "version": { "type": "string" },
+        "package": { "const": "rea-agents" },
+        "url": { "type": "string", "pattern": "^https://" },
+        "integrity": { "type": "string", "pattern": "^sha512-[A-Za-z0-9+/]+={0,2}$" }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["node", "java", "ghidra", "jadx"],
+      "additionalProperties": {
+        "type": "object",
+        "required": ["version", "url", "sha256"],
+        "properties": {
+          "version": { "type": "string" },
+          "url": { "type": "string", "pattern": "^https://" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    }
+  }
+}

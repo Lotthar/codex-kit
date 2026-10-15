@@ -15,6 +15,7 @@ import { brainReconcile } from './brain-reconcile.mjs';
 import { brainRepair } from './brain-repair.mjs';
 import { brainAlignment, finishProjectSetup, prepareProject, registerProject, rememberAndIndex, resolveBrainContext, setupProject } from './brain-workflow.mjs';
 import { upgradeAll } from './brain-upgrade.mjs';
+import { setupRea, reaStatus, removeRea } from './rea.mjs';
 
 const help = `Codex Kit — reproducible Codex setup
 
@@ -22,6 +23,7 @@ Usage:
   codex-kit wizard
   codex-kit setup [--preset NAME] [--model-routing] [--obsidian] [--memories] [--yes] [--allow-network]
   codex-kit models status|refresh [--home PATH] [--yes]
+  codex-kit rea setup|status|remove [--home PATH] [--yes] [--allow-network] [--json]
   codex-kit brain configure --vault NAME [--home PATH] [--yes]
   codex-kit brain register [--root PATH | --external-id ID] [--project KEY] [--name NAME] [--topics CSV] [--inclusion included|excluded|pending] [--yes]
   codex-kit brain projects [--home PATH]
@@ -132,6 +134,11 @@ export async function main(argv = process.argv.slice(2)) {
     else if (command === 'setup' || command === 'apply') {
       const plan = await globalPlan({ preset: values.preset || 'developer', home: values.home || codexHome(), allowNetwork: values['allow-network'], modelRouting: values['model-routing'], memories: values.memories, obsidian: values.obsidian });
       result = shouldApply ? await applyGlobal(plan, values['allow-network']) : plan;
+    } else if (command === 'rea' && ['setup', 'status', 'remove'].includes(subcommand)) {
+      const options = { home: values.home || codexHome(), ...(values.home ? { userHome: values.home } : {}) };
+      if (subcommand === 'status') result = await reaStatus(options);
+      else if (subcommand === 'setup') result = await setupRea({ ...options, execute: shouldApply, allowNetwork: Boolean(values['allow-network']) });
+      else result = await removeRea({ ...options, execute: shouldApply });
     } else if (command === 'models' && ['status', 'plan', 'refresh', 'apply'].includes(subcommand)) {
       if (subcommand === 'status') result = await modelRoutingStatus({ home: values.home || codexHome() });
       else {

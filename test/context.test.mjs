@@ -23,6 +23,17 @@ test('reports AGENTS byte accounting and the compact Brain budget', async () => 
   assert.equal(result.brainRecallBudgetBytes, 4096);
 });
 
+test('counts the separately managed REA policy without treating it as human guidance', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'codex-kit-context-rea-'));
+  const home = join(root, 'codex');
+  await mkdir(home);
+  const reaBlock = '<!-- codex-kit:rea:start -->\nREA guidance\n<!-- codex-kit:rea:end -->';
+  await writeFile(join(home, 'AGENTS.md'), `human\n${globalBlock}\n${reaBlock}\n`);
+  const result = await contextStatus({ root, home });
+  assert.equal(result.global.kitManagedBytes, Buffer.byteLength(globalBlock + reaBlock));
+  assert.equal(result.global.humanBytes, Buffer.byteLength('human\n\n\n'));
+});
+
 test('counts only tracked Kit skill targets when reporting duplicates', async () => {
   const root = await mkdtemp(join(tmpdir(), 'codex-kit-context-root-'));
   const home = await mkdtemp(join(tmpdir(), 'codex-kit-context-home-'));
