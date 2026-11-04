@@ -3,7 +3,7 @@ import { isAbsolute, join, win32 } from 'node:path';
 import { readdir, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { action, exists, readJson, run } from './util.mjs';
-import { loadManifest, presetComponents } from './manifest.mjs';
+import { loadLock, loadManifest, presetComponents } from './manifest.mjs';
 import { mergeManagedBlock, renderManagedBlock } from './managed.mjs';
 import { beginTransaction, copyTracked, finishTransaction, pathHash, removeTracked, replaceTracked, withLock, writeTracked } from './transaction.mjs';
 import { readText } from './platform.mjs';
@@ -30,6 +30,37 @@ function safeGlobalAsset(asset) {
 
 function globalAssetsFor(components, manifest) {
   return components.flatMap((component) => (manifest.components[component]?.globalAssets ?? []).map((asset) => safeGlobalAsset({ component, ...asset })));
+}
+
+function pluginCatalog(stdout) {
+  let parsed;
+  try { parsed = JSON.parse(stdout); } catch { throw new Error('codex plugin list did not return JSON.'); }
+  if (!Array.isArray(parsed?.installed)) throw new Error('codex plugin list returned an unexpected catalog.');
+  return parsed.installed;
+}
+
+function compareVersions(left, right) {
+  const parse = (version) => version.match(/^(\d+)\.(\d+)\.(\d+)(?:-([^+]+))?(?:\+.+)?$/)?.slice(1);
+  const leftParts = parse(left);
+  const rightParts = parse(right);
+  if (!leftParts || !rightParts) return null;
+  for (let index = 0; index < 3; index += 1) {
+    const difference = Number(leftParts[index]) - Number(rightParts[index]);
+    if (difference) return Math.sign(difference);
+  }
+  if (leftParts[3] === rightParts[3]) return 0;
+  if (leftParts[3] === undefined) return 1;
+  if (rightParts[3] === undefined) return -1;
+  return leftParts[3].localeCompare(rightParts[3]);
+}
+
+function pluginFailure(id, result) {
+  return new Error(`Unable to install ${id}: ${result?.stderr || result?.error || 'codex command failed'}`);
+}
+
+function installedPlugin(result, plugin) {
+  if (result?.status !== 0) throw pluginFailure(plugin, result);
+  return pluginCatalog(result.stdout).find((entry) => entry?.pluginId === plugin);
 }
 
 export async function globalPlan({ preset = 'developer', home = codexHome(), allowNetwork = false, modelRouting = false, memories = false, obsidian = false, components: selectedComponents, catalog = undefined }) {
@@ -179,23 +210,60 @@ export async function applyModelRoutingPlan(plan) {
   });
 }
 
-export async function applyGlobal(plan, allowNetwork = false) {
+export async function applyGlobal(plan, allowNetwork = false, runner = run) {
   return withLock(plan.home, async () => {
     const transaction = await beginTransaction(plan.home, 'global');
     const manifest = await loadManifest();
+    const runCodex = (args) => runner('codex', args, { env: { ...process.env, CODEX_HOME: plan.home } });
     const introduced = [];
+    const integrationActions = [];
     try {
       if (allowNetwork) for (const id of plan.components) {
         const component = manifest.components[id];
         if (!component.scope.includes('global') || !['plugin', 'mcp'].includes(component.kind)) continue;
-        const inspect = run('codex', component.kind === 'plugin' ? ['plugin', 'list'] : ['mcp', 'list']);
-        const marker = component.kind === 'plugin' ? component.plugin.split('@')[0] : id;
+        if (component.kind === 'plugin') {
+          const { components } = await loadLock();
+          const locked = components[id];
+          if (!component.marketplace || !locked?.gitCommit) throw new Error(`Plugin ${id} is missing locked marketplace metadata.`);
+          const current = installedPlugin(runCodex(['plugin', 'list', '--json']), component.plugin);
+          if (current?.enabled === false) {
+            integrationActions.push(action('conflict', `install ${id}`, `installed ${current.version} is disabled; preserved`));
+            continue;
+          }
+          if (current?.version === component.version) {
+            transaction.actions.push({ id, status: 0, unchanged: true, reversibility: 'best-effort' });
+            integrationActions.push(action('unchanged', `install ${id}`, `already matches locked ${component.version}`));
+            continue;
+          }
+          const versionComparison = current && compareVersions(current.version, component.version);
+          if (current && versionComparison === null) {
+            integrationActions.push(action('conflict', `install ${id}`, `installed ${current.version} has an unrecognized version; preserved`));
+            continue;
+          }
+          if (current && versionComparison > 0) {
+            integrationActions.push(action('conflict', `install ${id}`, `installed ${current.version} is newer than locked ${component.version}; preserved`));
+            continue;
+          }
+          const marketplace = runCodex(['plugin', 'marketplace', 'add', component.marketplace, '--ref', locked.gitCommit]);
+          transaction.actions.push({ id, command: ['codex', 'plugin', 'marketplace', 'add', component.marketplace, '--ref', locked.gitCommit], status: marketplace.status, reversibility: 'best-effort' });
+          if (marketplace.status !== 0) throw pluginFailure(id, marketplace);
+          const installed = runCodex(['plugin', 'add', component.plugin, '--json']);
+          transaction.actions.push({ id, command: ['codex', 'plugin', 'add', component.plugin, '--json'], status: installed.status, reversibility: 'best-effort' });
+          if (installed.status !== 0) throw pluginFailure(id, installed);
+          if (!current) introduced.push({ id, kind: component.kind, plugin: component.plugin });
+          const verified = installedPlugin(runCodex(['plugin', 'list', '--json']), component.plugin);
+          if (verified?.version !== component.version) throw new Error(`Codex rejected the installed ${id} version.`);
+          integrationActions.push(action('changed', `install ${id}`, `locked ${component.version}`));
+          continue;
+        }
+        const inspect = runCodex(['mcp', 'list']);
+        const marker = id;
         if (inspect.status === 0 && inspect.stdout.includes(marker)) {
           transaction.actions.push({ id, status: 0, unchanged: true, reversibility: 'best-effort' });
           continue;
         }
-        const command = component.kind === 'plugin' ? ['plugin', 'add', component.plugin] : ['mcp', 'add', id, '--', component.command, ...component.args];
-        const result = run('codex', command);
+        const command = ['mcp', 'add', id, '--', component.command, ...component.args];
+        const result = runCodex(command);
         transaction.actions.push({ id, command: ['codex', ...command], status: result.status, reversibility: 'best-effort' });
         if (result.status !== 0) throw new Error(`Unable to install ${id}: ${result.stderr || result.error || 'codex command failed'}`);
         introduced.push({ id, kind: component.kind, plugin: component.plugin });
@@ -212,13 +280,13 @@ export async function applyGlobal(plan, allowNetwork = false) {
       }
       const routingActions = plan.routing ? await applyModelRouting(transaction, plan.home, plan.routing) : [];
       const receipt = await finishTransaction(transaction);
-      const baseActions = plan.actions.filter((item) => item.kind !== 'global-asset').map((item) => item.state === 'planned' ? { ...item, state: 'changed' } : item);
-      const partial = [...assetActions, ...routingActions].some((item) => item.state === 'conflict');
-      return { ...plan, status: partial ? 'partial' : 'ok', transactionId: receipt.id, actions: [...baseActions, ...assetActions, ...routingActions] };
+      const baseActions = plan.actions.filter((item) => item.kind !== 'global-asset' && !integrationActions.some((action) => action.label === item.label)).map((item) => item.state === 'planned' ? { ...item, state: 'changed' } : item);
+      const partial = [...integrationActions, ...assetActions, ...routingActions].some((item) => item.state === 'conflict');
+      return { ...plan, status: partial ? 'partial' : 'ok', transactionId: receipt.id, actions: [...baseActions, ...integrationActions, ...assetActions, ...routingActions] };
     } catch (error) {
       for (const item of introduced.reverse()) {
         const command = item.kind === 'plugin' ? ['plugin', 'remove', item.plugin] : ['mcp', 'remove', item.id];
-        const result = run('codex', command);
+        const result = runCodex(command);
         transaction.actions.push({ id: item.id, rollback: true, command: ['codex', ...command], status: result.status, reversibility: 'best-effort' });
       }
       const receipt = await finishTransaction(transaction, 'failed');

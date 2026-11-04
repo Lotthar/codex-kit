@@ -13,6 +13,8 @@
 
 ## Unreleased
 
+- Updated the global Ponytail setup lock to 5.3.3 and made existing installs converge on the locked version without replacing a newer user install.
+
 - Added opt-in global REA setup/status/remove commands, a version-matched upstream investigation skill, and a plan-before-implementation feature adaptation policy.
 - Added a checksum-locked private Node/JDK/Ghidra/JADX toolchain, offline previews, exact asset ownership, and scoped removal that preserves unrelated configuration and investigation evidence.
 

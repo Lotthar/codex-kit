@@ -42,7 +42,7 @@ export async function backup(path, root) {
 }
 
 export function run(command, args, options = {}) {
-  const result = spawn.sync(command, args, { cwd: options.cwd, encoding: 'utf8', shell: false, timeout: options.timeout ?? 30_000, input: options.input });
+  const result = spawn.sync(command, args, { cwd: options.cwd, env: options.env, encoding: 'utf8', shell: false, timeout: options.timeout ?? 30_000, input: options.input });
   return { command, args, status: result.status ?? 1, stdout: result.stdout ?? '', stderr: result.stderr ?? '', error: result.error?.message };
 }
 

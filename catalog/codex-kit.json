@@ -22,7 +22,7 @@
         { "source": "workflow-skills/obsidian-project-brain", "target": "skills/obsidian-project-brain" }
       ]
     },
-    "ponytail": { "kind": "plugin", "scope": ["global"], "plugin": "ponytail@ponytail", "version": "4.8.4" },
+    "ponytail": { "kind": "plugin", "scope": ["global"], "plugin": "ponytail@ponytail", "marketplace": "DietrichGebert/ponytail", "version": "5.3.3" },
     "ruflo": { "kind": "mcp", "scope": ["global"], "command": "npx", "args": ["-y", "ruflo@3.28.0", "mcp", "start"], "approvalMode": "writes" },
     "graphify": {
       "kind": "project-tool",
