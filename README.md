@@ -6,11 +6,11 @@ Codex Kit turns an existing Git project into a reproducible Codex workspace. It 
 
 | Scope | Managed setup |
 | --- | --- |
-| Global Codex home | Bounded policy block, Ponytail plugin, Ruflo MCP, optional Obsidian Project Brain skill and REA integration |
+| Global Codex home | Bounded policy block, Humanizer prose-editing skill, Ponytail plugin, Ruflo MCP, optional Obsidian Project Brain skill and REA integration |
 | Git project | Detected profiles, bounded `AGENTS.md` block, workflow/quality skills, PromptX, optional Graphify adapter, stable brain project key |
 | Personal Obsidian vault | External, project-namespaced decisions, lessons, runbooks, and open questions |
 
-Ponytail, Ruflo, and the Project Brain policy are global because they shape how Codex works on a machine. Profiles, project skills, PromptX, Graphify configuration, and the brain project key stay inside the project so the development workflow travels with the repository. The vault and its contents remain outside the repository and under your control.
+Humanizer, Ponytail, Ruflo, and the Project Brain policy are global because they shape how Codex works on a machine. Profiles, project skills, PromptX, Graphify configuration, and the brain project key stay inside the project so the development workflow travels with the repository. The vault and its contents remain outside the repository and under your control.
 
 ## Personal Project Brain: recommended setup
 
@@ -207,6 +207,14 @@ Codex Kit keeps detailed procedures in on-demand skills and tests common compose
 For an existing personal installation, back up the global `AGENTS.md`, rerun `codex-kit setup --preset personal --yes`, refresh configured projects, and verify `codex-kit context status` before accepting any manual cleanup of human-authored global guidance. Kit setup itself changes only managed marker blocks and retains transaction receipts for rollback.
 
 Codex Kit writes between `<!-- codex-kit:project:start -->` and `<!-- codex-kit:project:end -->`. Human-authored instructions outside that block are preserved.
+
+## Global Humanizer skill
+
+Every Codex Kit global preset installs `$humanizer` in the Codex home. Use it on request—for example, `$humanizer` or “humanize this text”—when revising prose. It does not automatically rewrite ordinary Codex responses and is not copied into individual projects.
+
+The bundled skill is the reviewed [upstream Humanizer](https://github.com/blader/humanizer) revision [`b48c832f0f809c1b5658edbb838c2521b72f2413`](https://github.com/blader/humanizer/commit/b48c832f0f809c1b5658edbb838c2521b72f2413), version 4.0.0, under the MIT license. Updating it requires a reviewed change that pins a new upstream commit and refreshes the bundled provenance; ordinary Kit setup never downloads a mutable upstream version.
+
+Humanizer output remains a draft. Review factual, technical, commercial, legal, cited, or deliberately exact wording before publishing, because prose edits can change nuance or accidentally alter a claim. Global setup preserves an existing user-owned or modified `skills/humanizer` directory and reports the conflict instead of replacing it.
 
 ## Bundled project skills
 

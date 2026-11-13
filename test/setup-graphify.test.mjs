@@ -65,5 +65,9 @@ test('uses the no-key Graphify update path and requires both graph artifacts', a
   assert.equal(complete.result.status, 0, complete.result.stderr || complete.result.stdout);
   const policy = await readFile(join(complete.root, 'AGENTS.md'), 'utf8');
   assert.match(policy, /graphify update \./);
-  assert.match(policy, /commit that delta in a Graphify-only follow-up/);
+  assert.match(policy, /graphify-out.*local generated state/u);
+  assert.doesNotMatch(policy, /commit that delta in a Graphify-only follow-up/u);
+  assert.match(await readFile(join(complete.root, '.gitignore'), 'utf8'), /^\/graphify-out\/$/mu);
+  assert.equal(spawnSync('git', ['-C', complete.root, 'check-ignore', '-q', 'graphify-out/graph.json']).status, 0);
+  assert.doesNotMatch(spawnSync('git', ['-C', complete.root, 'status', '--short', '--untracked-files=all'], { encoding: 'utf8' }).stdout, /graphify-out/u);
 });

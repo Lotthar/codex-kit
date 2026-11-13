@@ -1,5 +1,6 @@
 node_modules/
 .codex-kit/*
 !.codex-kit/config.json
+/graphify-out/
 *.log
 .DS_Store

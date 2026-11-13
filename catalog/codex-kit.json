@@ -8,7 +8,9 @@
     "personal": ["base-policy", "ponytail", "ruflo", "workflow-skills", "promptx", "clean-code", "obsidian-brain"]
   },
   "components": {
-    "base-policy": { "kind": "policy", "scope": ["global", "project"], "source": "policies/global.md" },
+    "base-policy": { "kind": "policy", "scope": ["global", "project"], "source": "policies/global.md", "globalAssets": [
+      { "source": "workflow-skills/humanizer", "target": "skills/humanizer" }
+    ] },
     "model-routing": { "kind": "policy", "scope": ["global"], "source": "policies/model-routing.md" },
     "obsidian-brain": {
       "kind": "policy",

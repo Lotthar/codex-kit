@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyGlobal, globalPlan, safeExport, setAllowlistedConfig } from '../src/global.mjs';
+import { pathHash } from '../src/transaction.mjs';
 
 const ponytailId = 'ponytail@ponytail';
 
@@ -203,4 +204,103 @@ test('switching away from personal removes only an unchanged Kit-owned global sk
   assert.equal((await import('node:fs')).existsSync(skill), true);
   await applyGlobal(await globalPlan({ home, preset: 'developer' }));
   assert.equal((await import('node:fs')).existsSync(skill), false);
+});
+
+test('every global preset plans the on-request Humanizer skill', async (t) => {
+  for (const preset of ['minimal', 'developer', 'personal']) await t.test(preset, async () => {
+    const home = await mkdtemp(join(tmpdir(), 'codex-kit-humanizer-plan-'));
+    const plan = await globalPlan({ home, preset });
+    const action = plan.actions.find((item) => item.label === 'provision skills/humanizer');
+    assert.equal(action?.state, 'planned');
+    assert.equal(action?.detail, 'base-policy');
+  });
+});
+
+test('global Humanizer setup installs, records, and preserves the Kit-owned skill', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'codex-kit-humanizer-install-'));
+  const skill = join(home, 'skills', 'humanizer', 'SKILL.md');
+  const first = await applyGlobal(await globalPlan({ home, preset: 'minimal' }));
+  assert.equal(first.status, 'ok');
+  assert.match(await readFile(skill, 'utf8'), /name: humanizer/);
+  const receipt = JSON.parse(await readFile(join(home, '.codex-kit', 'global-assets.json'), 'utf8'));
+  assert.equal(receipt.assets.some((asset) => asset.target === 'skills/humanizer' && asset.component === 'base-policy'), true);
+
+  const second = await applyGlobal(await globalPlan({ home, preset: 'minimal' }));
+  assert.equal(second.status, 'ok');
+  assert.equal(second.actions.find((item) => item.label === 'provision skills/humanizer')?.state, 'unchanged');
+});
+
+test('global Humanizer setup refreshes unchanged owned content from the bundled skill', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'codex-kit-humanizer-update-'));
+  const directory = join(home, 'skills', 'humanizer');
+  const skill = join(directory, 'SKILL.md');
+  const oldSkill = '# Older Kit-owned humanizer\n';
+  await mkdir(directory, { recursive: true });
+  await writeFile(skill, oldSkill);
+  await mkdir(join(home, '.codex-kit'), { recursive: true });
+  await writeFile(join(home, '.codex-kit', 'global-assets.json'), `${JSON.stringify({ schemaVersion: 1, assets: [{
+    component: 'base-policy',
+    source: 'workflow-skills/humanizer',
+    target: 'skills/humanizer',
+    hash: await pathHash(directory)
+  }] }, null, 2)}\n`);
+
+  const result = await applyGlobal(await globalPlan({ home, preset: 'minimal' }));
+  assert.equal(result.status, 'ok');
+  assert.match(await readFile(skill, 'utf8'), /name: humanizer/);
+  assert.equal(result.actions.find((item) => item.label === 'update skills/humanizer')?.state, 'changed');
+});
+
+test('global Humanizer setup preserves user-owned and modified content', async (t) => {
+  await t.test('existing user-owned skill', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'codex-kit-humanizer-collision-'));
+    const skill = join(home, 'skills', 'humanizer', 'SKILL.md');
+    await mkdir(join(home, 'skills', 'humanizer'), { recursive: true });
+    await writeFile(skill, '# User-owned humanizer\n');
+    const result = await applyGlobal(await globalPlan({ home, preset: 'minimal' }));
+    assert.equal(result.status, 'partial');
+    assert.equal(await readFile(skill, 'utf8'), '# User-owned humanizer\n');
+    assert.equal(result.actions.find((item) => item.label === 'provision skills/humanizer')?.state, 'conflict');
+  });
+
+  await t.test('modified Kit-owned skill remains during removal', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'codex-kit-humanizer-modified-'));
+    const skill = join(home, 'skills', 'humanizer', 'SKILL.md');
+    await applyGlobal(await globalPlan({ home, preset: 'minimal' }));
+    await writeFile(skill, '# Modified humanizer\n');
+    const result = await applyGlobal(await globalPlan({ home, components: [] }));
+    assert.equal(result.status, 'partial');
+    assert.equal(await readFile(skill, 'utf8'), '# Modified humanizer\n');
+    assert.equal(result.actions.find((item) => item.label === 'remove skills/humanizer')?.state, 'conflict');
+  });
+
+  await t.test('modified Kit-owned skill remains during reapply', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'codex-kit-humanizer-reapply-'));
+    const skill = join(home, 'skills', 'humanizer', 'SKILL.md');
+    await applyGlobal(await globalPlan({ home, preset: 'minimal' }));
+    await writeFile(skill, '# Modified humanizer\n');
+    const result = await applyGlobal(await globalPlan({ home, preset: 'minimal' }));
+    assert.equal(result.status, 'partial');
+    assert.equal(await readFile(skill, 'utf8'), '# Modified humanizer\n');
+    assert.equal(result.actions.find((item) => item.label === 'provision skills/humanizer')?.state, 'conflict');
+  });
+});
+
+test('global Humanizer removal deletes only unchanged Kit-owned content', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'codex-kit-humanizer-remove-'));
+  const skill = join(home, 'skills', 'humanizer');
+  await applyGlobal(await globalPlan({ home, preset: 'minimal' }));
+  await applyGlobal(await globalPlan({ home, components: [] }));
+  assert.equal((await import('node:fs')).existsSync(skill), false);
+});
+
+test('global Humanizer setup rolls back copied assets when a later asset fails', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'codex-kit-humanizer-rollback-'));
+  const plan = { ...await globalPlan({ home, components: [] }) };
+  Object.defineProperty(plan, 'globalAssets', { value: [
+    { component: 'base-policy', source: 'workflow-skills/humanizer', target: 'skills/humanizer' },
+    { component: 'base-policy', source: 'workflow-skills/missing', target: 'skills/missing' }
+  ] });
+  await assert.rejects(() => applyGlobal(plan), /ENOENT/);
+  assert.equal((await import('node:fs')).existsSync(join(home, 'skills', 'humanizer')), false);
 });

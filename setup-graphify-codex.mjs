@@ -12,7 +12,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const GRAPHIFY_PACKAGE = "graphifyy";
-const COST_IGNORE_LINE = "graphify-out/cost.json";
+const GRAPHIFY_OUTPUT_IGNORE_LINE = "/graphify-out/";
 const POLICY_START = "<!-- BEGIN GRAPHIFY CODEX POLICY -->";
 const POLICY_END = "<!-- END GRAPHIFY CODEX POLICY -->";
 const GRAPHIFY_IGNORE_DEFAULT = `# Graphify also respects .gitignore automatically.
@@ -37,13 +37,12 @@ Required workflow:
 1. If \`graphify-out/graph.json\` exists, query it before using broad \`grep\`, \`rg\`, \`find\`, globbing, or file-by-file reading:
    \`graphify query "<task-specific question>" --graph graphify-out/graph.json\`
 2. For architecture or subsystem orientation, read \`graphify-out/GRAPH_REPORT.md\` first.
-3. Do not skip Graphify because \`graphify-out/\` is dirty or has uncommitted changes. Graphify output is generated state and may normally change during work.
+3. Treat \`graphify-out/\` as local generated state. Keep it ignored by Git; its presence or absence from Git status does not affect Graphify use.
 4. Use raw search only after Graphify narrows the likely modules, files, symbols, or concepts.
-5. After significant code changes, refresh the graph from the repo root:
+5. After significant code changes, refresh the local graph from the repo root:
    \`graphify update .\`
 6. Inside Codex, use \`$graphify .\` when an explicit Graphify build or rebuild is needed. In a terminal, \`graphify update .\` builds or refreshes the code graph without an API key.
-7. Whenever a task includes Git commits, review and commit the relevant \`graphify-out/\` changes with the code changes that produced them. Never stage \`graphify-out/cost.json\`, dated backup directories, or unrelated pre-existing Graphify changes.
-8. After each code commit, run \`graphify update .\` again to reconcile any detached post-commit rebuild, then re-check \`git status\`. If it creates a relevant tracked Graphify delta, commit that delta in a Graphify-only follow-up before pushing or handing off.
+7. Never stage or commit files under \`graphify-out/\`; rebuild the local graph on demand when a fresh graph is needed.
 
 If \`graphify-out/graph.json\` does not exist, build it before falling back. Only fall back to normal repository exploration when Graphify is unavailable or the build fails.
 ${POLICY_END}
@@ -349,13 +348,6 @@ function upsertMarkedBlock(filePath, startMarker, endMarker, blockText, options,
   return writeText(filePath, next, options, changedFiles);
 }
 
-function detectIgnoredGraphifyOut(gitignoreText) {
-  return gitignoreText.split(/\r?\n/u).some((line) => {
-    const rule = line.trim();
-    return !rule.startsWith("#") && /^(?:\/)?graphify-out\/?(?:\*\*)?\/?$/u.test(rule);
-  });
-}
-
 function updateTomlFeatureFlags(configText, flags) {
   const lines = configText.split(/\r?\n/u);
   const sectionIndexes = lines
@@ -523,11 +515,12 @@ function main() {
   else log("info", "Preserved existing .graphifyignore.");
 
   const gitignorePath = path.join(options.repoRoot, ".gitignore");
-  const originalGitignore = readTextIfExists(gitignorePath) ?? "";
-  if (detectIgnoredGraphifyOut(originalGitignore)) {
-    log("warn", ".gitignore appears to ignore all graphify-out/. Team reuse works best when graphify-out/ is committed, while graphify-out/cost.json remains ignored.");
+  ensureLine(gitignorePath, GRAPHIFY_OUTPUT_IGNORE_LINE, options, changedFiles);
+
+  const trackedGraphifyOutput = tryRun("git", ["ls-files", "--", "graphify-out"], options);
+  if (trackedGraphifyOutput.ok && trackedGraphifyOutput.stdout.trim()) {
+    log("warn", "Graphify output is still tracked. Run `git rm -r --cached -- graphify-out` once to keep the files local without deleting them.");
   }
-  ensureLine(gitignorePath, COST_IGNORE_LINE, options, changedFiles);
 
   const agentsUpdated = upsertMarkedBlock(path.join(options.repoRoot, "AGENTS.md"), POLICY_START, POLICY_END, GRAPHIFY_POLICY, options, changedFiles);
   const userConfigStatus = updateUserConfig(options, changedFiles);
@@ -552,10 +545,9 @@ function main() {
   .codex/
   .graphifyignore
   .gitignore
-  graphify-out/
 
-Do not commit:
-  graphify-out/cost.json
+Keep local and do not commit:
+  graphify-out/
 
 Codex trust step:
   Open Codex in this repository. If Codex reports untrusted project hooks, run /hooks and review/trust the Graphify hook.
