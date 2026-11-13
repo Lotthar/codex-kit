@@ -224,6 +224,18 @@ The bundle is the reviewed [upstream Higgsfield skills](https://github.com/higgs
 
 Generation, media uploads, Soul training, URL imports, deployments, and publishing can consume credits or change a provider account. They run only for explicit user requests. Global setup preserves any existing user-owned or modified Higgsfield skill directory and reports a conflict instead of replacing it.
 
+## Global design and engineering skills
+
+Every global preset also installs seven reviewed UI/UX Pro Max skills: `$ui-ux-pro-max`, `$ui-styling`, `$design`, `$design-system`, `$brand`, `$banner-design`, and `$slides`. Codex should consult them implicitly for tasks that affect visual structure, interaction, responsive behavior, accessibility, typography, color, or design-system choices; each remains callable explicitly. Project-specific implementation and browser-verification skills still own code changes and UI validation. The bundled UI/UX Pro Max search data works offline with Python 3 and the standard library; persistent design-system output still requires the task's normal write authority.
+
+The UI/UX bundle is pinned to [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) revision [`6ae86f61f520d6ca229d2f40e070410638c908c5`](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill/commit/6ae86f61f520d6ca229d2f40e070410638c908c5), under the MIT license.
+
+The stable engineering and productivity skills from [mattpocock/skills](https://github.com/mattpocock/skills) are also available globally, pinned to [`5863806dd4e15c63174bee4e7515a4256792ecfa`](https://github.com/mattpocock/skills/commit/5863806dd4e15c63174bee4e7515a4256792ecfa) under MIT. Their model-eligible skills may be selected when their specialized purpose fits; Kit's existing planning, implementation, debugging, review, and refactoring workflows remain authoritative. Upstream explicit-only skills keep that restriction and require a direct call. Experimental and miscellaneous upstream skills are not bundled.
+
+`$karpathy-guidelines` is available explicitly and informs non-trivial coding work: surface material ambiguity, prefer the smallest verified change, and define success criteria. It is pinned to [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) revision [`2c606141936f1eeef17fa3043a72095b4765b9c2`](https://github.com/multica-ai/andrej-karpathy-skills/commit/2c606141936f1eeef17fa3043a72095b4765b9c2). That upstream revision declares MIT but does not include a root license notice; its provenance record documents the limitation.
+
+Each collection updates only through a reviewed, pinned Kit change and preserves colliding user-owned skills. Global skill inventories are large; Codex may shorten some descriptions to fit its context budget, while explicit calls remain available.
+
 ## Bundled project skills
 
 The developer preset installs the core skills below under `.agents/skills/`; the personal preset additionally installs the Obsidian Project Brain skill:
