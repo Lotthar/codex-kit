@@ -216,6 +216,14 @@ The bundled skill is the reviewed [upstream Humanizer](https://github.com/blader
 
 Humanizer output remains a draft. Review factual, technical, commercial, legal, cited, or deliberately exact wording before publishing, because prose edits can change nuance or accidentally alter a claim. Global setup preserves an existing user-owned or modified `skills/humanizer` directory and reports the conflict instead of replacing it.
 
+## Global Higgsfield skills
+
+Every Codex Kit global preset installs the `$higgsfield-*` skills through `base-policy`. They cover generation, Soul identity training, product photoshoots, brand kits, marketplace cards, websites, faceless videos, the legacy video-explainer entry, and YouTube thumbnails. They may route relevant requests to Higgsfield, but never independently submit provider jobs or change provider state.
+
+The bundle is the reviewed [upstream Higgsfield skills](https://github.com/higgsfield-ai/skills) revision [`27000402070db19d958789d05b3b52b6f4718d7c`](https://github.com/higgsfield-ai/skills/commit/27000402070db19d958789d05b3b52b6f4718d7c), version 0.14.0, under the MIT license. The Higgsfield CLI and its login remain separate: Kit neither installs the CLI nor authenticates an account. Upstream skills suggest a mutable remote CLI installer when the command is missing; Kit's global policy tells Codex to report that prerequisite instead of running the unpinned bootstrap. Updating the bundle requires a reviewed, pinned upstream change; routine setup never downloads upstream content.
+
+Generation, media uploads, Soul training, URL imports, deployments, and publishing can consume credits or change a provider account. They run only for explicit user requests. Global setup preserves any existing user-owned or modified Higgsfield skill directory and reports a conflict instead of replacing it.
+
 ## Bundled project skills
 
 The developer preset installs the core skills below under `.agents/skills/`; the personal preset additionally installs the Obsidian Project Brain skill:

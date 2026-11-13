@@ -9,7 +9,16 @@
   },
   "components": {
     "base-policy": { "kind": "policy", "scope": ["global", "project"], "source": "policies/global.md", "globalAssets": [
-      { "source": "workflow-skills/humanizer", "target": "skills/humanizer" }
+      { "source": "workflow-skills/humanizer", "target": "skills/humanizer" },
+      { "source": "workflow-skills/higgsfield-brandkit", "target": "skills/higgsfield-brandkit" },
+      { "source": "workflow-skills/higgsfield-faceless-video", "target": "skills/higgsfield-faceless-video" },
+      { "source": "workflow-skills/higgsfield-generate", "target": "skills/higgsfield-generate" },
+      { "source": "workflow-skills/higgsfield-marketplace-cards", "target": "skills/higgsfield-marketplace-cards" },
+      { "source": "workflow-skills/higgsfield-product-photoshoot", "target": "skills/higgsfield-product-photoshoot" },
+      { "source": "workflow-skills/higgsfield-soul-id", "target": "skills/higgsfield-soul-id" },
+      { "source": "workflow-skills/higgsfield-video-explainer", "target": "skills/higgsfield-video-explainer" },
+      { "source": "workflow-skills/higgsfield-websites", "target": "skills/higgsfield-websites" },
+      { "source": "workflow-skills/higgsfield-youtube-thumbnail", "target": "skills/higgsfield-youtube-thumbnail" }
     ] },
     "model-routing": { "kind": "policy", "scope": ["global"], "source": "policies/model-routing.md" },
     "obsidian-brain": {
