@@ -63,11 +63,12 @@ function installedPlugin(result, plugin) {
   return pluginCatalog(result.stdout).find((entry) => entry?.pluginId === plugin);
 }
 
-export async function globalPlan({ preset = 'developer', home = codexHome(), allowNetwork = false, modelRouting = false, memories = false, obsidian = false, components: selectedComponents, catalog = undefined }) {
+export async function globalPlan({ preset = 'developer', home = codexHome(), allowNetwork = false, modelRouting = false, memories = false, obsidian = false, onDemandSkills = false, components: selectedComponents, catalog = undefined }) {
   const manifest = await loadManifest();
   if (selectedComponents !== undefined && (!Array.isArray(selectedComponents) || selectedComponents.some((id) => typeof id !== 'string' || !manifest.components[id]))) throw new Error('Global components must be known component IDs.');
   const components = [...new Set(selectedComponents ?? [...await presetComponents(preset), ...(modelRouting ? ['model-routing'] : []), ...(obsidian ? ['obsidian-brain'] : [])])]
     .filter((id) => manifest.components[id].scope.includes('global'));
+  if (onDemandSkills && !components.includes('base-policy')) throw new Error('On-demand skill discovery requires base-policy routing instructions.');
   const actions = [action('planned', `manage ${join(home, 'AGENTS.md')}`, 'bounded global policy block', { scope: 'global', reversibility: 'full' })];
   const globalAssets = globalAssetsFor(components, manifest);
   for (const asset of globalAssets) actions.push(action('planned', `provision ${asset.target}`, asset.component, { kind: 'global-asset', scope: 'global', reversibility: 'full' }));
@@ -80,7 +81,8 @@ export async function globalPlan({ preset = 'developer', home = codexHome(), all
   const routing = modelRouting ? resolveModelRouting(catalog === undefined ? modelCatalog() : catalog) : null;
   if (routing) actions.push(...routingActions(routing));
   if (memories) actions.push(action('planned', 'enable native Codex memories', 'experimental companion; Obsidian remains the curated project brain', { scope: 'global', reversibility: 'full' }));
-  const plan = { status: 'ok', preset, home, components, memories, ...(routing ? { models: routingSummary(routing) } : {}), actions };
+  if (onDemandSkills) actions.push(action('planned', 'use on-demand skill discovery', 'disable eager catalog; preserve explicit calls and use bounded runtime lookup', { scope: 'global', reversibility: 'full' }));
+  const plan = { status: 'ok', preset, home, components, memories, onDemandSkills, ...(routing ? { models: routingSummary(routing) } : {}), actions };
   Object.defineProperty(plan, 'globalAssets', { value: globalAssets });
   if (routing) Object.defineProperty(plan, 'routing', { value: routing });
   return plan;
@@ -277,6 +279,10 @@ export async function applyGlobal(plan, allowNetwork = false, runner = run) {
       if (plan.memories) {
         const configPath = join(plan.home, 'config.toml');
         await writeTracked(transaction, configPath, setTomlValues(await readConfig(configPath), 'features', { memories: 'true' }));
+      }
+      if (plan.onDemandSkills) {
+        const configPath = join(plan.home, 'config.toml');
+        await writeTracked(transaction, configPath, setTomlValues(await readConfig(configPath), 'skills', { include_instructions: 'false' }));
       }
       const routingActions = plan.routing ? await applyModelRouting(transaction, plan.home, plan.routing) : [];
       const receipt = await finishTransaction(transaction);

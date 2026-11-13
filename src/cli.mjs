@@ -8,6 +8,7 @@ import { applyGlobal, applyModelRoutingPlan, checkUpdates, codexHome, globalPlan
 import { applyProject, doctor, findProjectRoot, modifyProject, projectDiff, projectPlan, projectStatus, rollbackProject } from './project.mjs';
 import { enrich, sanitizedInventory } from './enrichment.mjs';
 import { importSkill } from './skills.mjs';
+import { searchSkills } from './skill-discovery.mjs';
 import { listTransactions } from './transaction.mjs';
 import { brainAudit, brainConfigure, brainInit, brainMigrate, brainRecall, brainRead, brainStatus } from './obsidian.mjs';
 import { brainProjects, brainRegister, brainRekey, loadBrainRegistry } from './brain-registry.mjs';
@@ -21,7 +22,7 @@ const help = `Codex Kit — reproducible Codex setup
 
 Usage:
   codex-kit wizard
-  codex-kit setup [--preset NAME] [--model-routing] [--obsidian] [--memories] [--yes] [--allow-network]
+  codex-kit setup [--preset NAME] [--model-routing] [--on-demand-skills] [--obsidian] [--memories] [--yes] [--allow-network]
   codex-kit models status|refresh [--home PATH] [--yes]
   codex-kit rea setup|status|remove [--home PATH] [--yes] [--allow-network] [--json]
   codex-kit brain configure --vault NAME [--home PATH] [--yes]
@@ -38,6 +39,7 @@ Usage:
   codex-kit project init|plan|apply|refresh|status [--root PATH]
   codex-kit component add|remove|list ID [--root PATH]
   codex-kit skill import NAME --source PATH [--yes]
+  codex-kit skill search --query TEXT | --name NAME [--root PATH] [--home PATH] [--json]
   codex-kit diff [--root PATH]
   codex-kit doctor [--all]
   codex-kit upgrade --all [--expected-hash HASH] [--resume ID] [--yes]
@@ -45,12 +47,12 @@ Usage:
   codex-kit rollback [--transaction ID] [--root PATH]
   codex-kit update --check [--allow-network]
   codex-kit export [--source PATH] [--output PATH] [--include-content] [--yes]
-  codex-kit config set features.key --value true [--yes]
+  codex-kit config set features.key|agents.key|skills.include_instructions --value VALUE [--yes]
 
 Mutations preview by default. --yes applies; --dry-run always previews; --json never prompts.`;
 
 const optionSpec = {
-  all: { type: 'boolean' }, scope: { type: 'string' }, project: { type: 'string' }, name: { type: 'string' }, topics: { type: 'string' }, inclusion: { type: 'string' }, 'external-id': { type: 'string' }, path: { type: 'string' }, 'expected-hash': { type: 'string' }, resume: { type: 'string' },
+  'on-demand-skills': { type: 'boolean' }, all: { type: 'boolean' }, scope: { type: 'string' }, project: { type: 'string' }, name: { type: 'string' }, topics: { type: 'string' }, inclusion: { type: 'string' }, 'external-id': { type: 'string' }, path: { type: 'string' }, 'expected-hash': { type: 'string' }, resume: { type: 'string' },
   yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, json: { type: 'boolean' }, help: { type: 'boolean' }, check: { type: 'boolean' }, 'include-content': { type: 'boolean' }, 'allow-network': { type: 'boolean' }, 'model-routing': { type: 'boolean' }, memories: { type: 'boolean' }, obsidian: { type: 'boolean' }, 'cross-project': { type: 'boolean' }, enrich: { type: 'boolean' }, global: { type: 'boolean' }, preset: { type: 'string' }, home: { type: 'string' }, root: { type: 'string' }, source: { type: 'string' }, output: { type: 'string' }, transaction: { type: 'string' }, value: { type: 'string' }, vault: { type: 'string' }, query: { type: 'string' }, kind: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' }, details: { type: 'string' }, supersedes: { type: 'string' }, to: { type: 'string' }
 };
 
@@ -132,7 +134,7 @@ export async function main(argv = process.argv.slice(2)) {
     let result;
     if (command === 'wizard') result = await runWizard(values);
     else if (command === 'setup' || command === 'apply') {
-      const plan = await globalPlan({ preset: values.preset || 'developer', home: values.home || codexHome(), allowNetwork: values['allow-network'], modelRouting: values['model-routing'], memories: values.memories, obsidian: values.obsidian });
+      const plan = await globalPlan({ preset: values.preset || 'developer', home: values.home || codexHome(), allowNetwork: values['allow-network'], modelRouting: values['model-routing'], memories: values.memories, obsidian: values.obsidian, onDemandSkills: values['on-demand-skills'] });
       result = shouldApply ? await applyGlobal(plan, values['allow-network']) : plan;
     } else if (command === 'rea' && ['setup', 'status', 'remove'].includes(subcommand)) {
       const options = { home: values.home || codexHome(), ...(values.home ? { userHome: values.home } : {}) };
@@ -233,6 +235,8 @@ export async function main(argv = process.argv.slice(2)) {
     } else if (command === 'add' || command === 'remove') {
       if (!subcommand) throw new Error(`Component ID is required: codex-kit ${command} ID`);
       result = await modifyProject({ root: values.root || process.cwd(), component: subcommand, remove: command === 'remove', execute: shouldApply });
+    } else if (command === 'skill' && subcommand === 'search') {
+      result = await searchSkills({ query: values.query, name: values.name, root: values.root || process.cwd(), home: values.home || codexHome() });
     } else if (command === 'skill' && subcommand === 'import') {
       if (!value || !values.source) throw new Error('Use: codex-kit skill import NAME --source PATH');
       result = await importSkill({ root: values.root || process.cwd(), sourceRoot: values.source, name: value, execute: shouldApply });

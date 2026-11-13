@@ -6,13 +6,18 @@ const safeKey = /^[a-zA-Z0-9_-]+$/;
 const safeValue = /^(true|false|[0-9]+|"(?:[^"\\]|\\.)*")$/;
 
 export function setTomlValues(text, section, values) {
-  if (!['features', 'agents'].includes(section)) throw new Error(`Section not allowlisted: ${section}`);
+  if (!['features', 'agents', 'skills'].includes(section)) throw new Error(`Section not allowlisted: ${section}`);
   for (const [key, value] of Object.entries(values)) if (!safeKey.test(key) || !safeValue.test(String(value))) throw new Error(`Unsafe TOML value for ${key}`);
+  if (section === 'skills' && Object.entries(values).some(([key, value]) => key !== 'include_instructions' || !/^(true|false)$/.test(String(value)))) throw new Error('Only skills.include_instructions boolean is allowlisted.');
   const eol = detectEol(text);
   const bom = text.startsWith('\uFEFF') ? '\uFEFF' : '';
   const lines = text.slice(bom.length).split(/\r?\n/);
-  const headers = lines.map((line, index) => ({ index, name: line.match(/^\s*\[([^\]]+)]\s*(?:#.*)?$/)?.[1] })).filter((item) => item.name);
-  const matching = headers.filter((item) => item.name === section);
+  const headers = lines.map((line, index) => {
+    const table = line.match(/^\s*\[([^\]]+)]\s*(?:#.*)?$/);
+    const array = line.match(/^\s*\[\[([^\]]+)]]\s*(?:#.*)?$/);
+    return { index, name: table?.[1] ?? array?.[1], array: Boolean(array) };
+  }).filter((item) => item.name);
+  const matching = headers.filter((item) => item.name === section && !item.array);
   if (matching.length > 1) throw new Error(`Duplicate [${section}] table.`);
   const target = matching[0];
   if (!target) {

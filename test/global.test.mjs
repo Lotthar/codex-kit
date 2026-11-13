@@ -161,6 +161,27 @@ test('writes strict allowlisted config transactionally', async () => {
   assert.match(await readFile(join(root, 'config.toml'), 'utf8'), /example = true/);
 });
 
+test('on-demand skill setup is opt-in and preserves skill config entries', async () => {
+  const defaultHome = await mkdtemp(join(tmpdir(), 'codex-kit-default-skill-catalog-'));
+  const defaultPlan = await globalPlan({ home: defaultHome, preset: 'minimal' });
+  assert.equal(defaultPlan.onDemandSkills, false);
+  assert.equal(defaultPlan.actions.some((item) => item.label === 'use on-demand skill discovery'), false);
+  await applyGlobal(defaultPlan);
+  await assert.rejects(readFile(join(defaultHome, 'config.toml'), 'utf8'), { code: 'ENOENT' });
+
+  const home = await mkdtemp(join(tmpdir(), 'codex-kit-on-demand-skill-catalog-'));
+  await writeFile(join(home, 'config.toml'), '[skills]\n\n[[skills.config]]\npath = "/tmp/keep.md"\nenabled = false\n');
+  const plan = await globalPlan({ home, preset: 'minimal', onDemandSkills: true });
+  assert.equal(plan.actions.find((item) => item.label === 'use on-demand skill discovery')?.state, 'planned');
+  assert.equal(plan.components.includes('base-policy'), true);
+  await applyGlobal(plan);
+  const policy = await readFile(join(home, 'AGENTS.md'), 'utf8');
+  assert.match(policy, /requested prose rewrites or humanization/);
+  assert.match(policy, /one narrow approval to retry the same lookup command/);
+  assert.match(policy, /skills\/humanizer\/SKILL\.md/);
+  assert.match(await readFile(join(home, 'config.toml'), 'utf8'), /\[skills\]\n\ninclude_instructions = false\n\[\[skills\.config\]\]\npath = "\/tmp\/keep\.md"/);
+});
+
 test('personal setup installs the global brain skill and optional native memories', async () => {
   const home = await mkdtemp(join(tmpdir(), 'codex-kit-global-brain-'));
   await writeFile(join(home, 'AGENTS.md'), '# Human global rules\n');

@@ -13,6 +13,7 @@
 
 ## Unreleased
 
+- Added opt-in on-demand skill discovery to avoid eager catalog budget warnings while preserving explicit local/plugin calls, plus a bounded runtime skill lookup for implicit routing.
 - Consolidated global skill activation without removing existing skills: `$humanizer` and the new `$kit-engineering`, `$kit-ui`, and `$kit-media` domain entries are automatically eligible; 44 specialists remain installed as explicit calls.
 - Added `node scripts/skill-inventory.mjs [--home PATH]` for catalog or top-level installed skill count, automatically eligible count, and automatic frontmatter bytes, without token estimates.
 - Updated the global Ponytail setup lock to 5.3.3 and made existing installs converge on the locked version without replacing a newer user install.

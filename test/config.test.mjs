@@ -18,3 +18,14 @@ test('preserves CRLF and rejects duplicate tables', () => {
   assert.match(output, /\r\n/);
   assert.throws(() => setTomlValues('[features]\na = true\n[features]\nb = false\n', 'features', { a: 'false' }), /Duplicate/);
 });
+
+test('allows only the native on-demand skills setting', () => {
+  const output = setTomlValues('[skills]\nkeep = "value"\n', 'skills', { include_instructions: 'false' });
+  assert.match(output, /\[skills\]\nkeep = "value"\n\ninclude_instructions = false/);
+  assert.throws(() => setTomlValues('', 'skills', { anything_else: 'true' }), /allowlisted/);
+});
+
+test('does not append a top-level skills setting into a skills config array', () => {
+  const output = setTomlValues('[skills]\n\n[[skills.config]]\npath = "/tmp/skill.md"\nenabled = false\n', 'skills', { include_instructions: 'false' });
+  assert.match(output, /\[skills\]\n\ninclude_instructions = false\n\[\[skills\.config\]\]/);
+});
