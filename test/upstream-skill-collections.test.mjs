@@ -48,8 +48,10 @@ test('global setup installs all upstream skills, records ownership, and preserve
   const first = await applyGlobal(await globalPlan({ home, preset: 'minimal' }));
   assert.equal(first.status, 'ok');
   const policy = await readFile(join(home, 'AGENTS.md'), 'utf8');
-  assert.match(policy, /use \$ui-ux-pro-max/);
-  assert.match(policy, /use \$karpathy-guidelines/);
+  assert.match(policy, /\$kit-engineering/);
+  assert.match(policy, /\$kit-ui/);
+  assert.match(policy, /\$kit-media/);
+  assert.match(policy, /Explicit \$skill-name requests select that skill directly/);
   const receipt = JSON.parse(await readFile(join(home, '.codex-kit', 'global-assets.json'), 'utf8'));
   for (const name of skills) {
     assert.equal(receipt.assets.some((asset) => asset.target === `skills/${name}` && asset.component === 'base-policy'), true);

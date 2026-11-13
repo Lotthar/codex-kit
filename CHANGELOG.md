@@ -13,6 +13,8 @@
 
 ## Unreleased
 
+- Consolidated global skill activation without removing existing skills: `$humanizer` and the new `$kit-engineering`, `$kit-ui`, and `$kit-media` domain entries are automatically eligible; 44 specialists remain installed as explicit calls.
+- Added `node scripts/skill-inventory.mjs [--home PATH]` for catalog or top-level installed skill count, automatically eligible count, and automatic frontmatter bytes, without token estimates.
 - Updated the global Ponytail setup lock to 5.3.3 and made existing installs converge on the locked version without replacing a newer user install.
 
 - Added opt-in global REA setup/status/remove commands, a version-matched upstream investigation skill, and a plan-before-implementation feature adaptation policy.

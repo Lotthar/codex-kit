@@ -10,6 +10,9 @@
   "components": {
     "base-policy": { "kind": "policy", "scope": ["global", "project"], "source": "policies/global.md", "globalAssets": [
       { "source": "workflow-skills/humanizer", "target": "skills/humanizer" },
+      { "source": "workflow-skills/kit-engineering", "target": "skills/kit-engineering" },
+      { "source": "workflow-skills/kit-ui", "target": "skills/kit-ui" },
+      { "source": "workflow-skills/kit-media", "target": "skills/kit-media" },
       { "source": "workflow-skills/higgsfield-brandkit", "target": "skills/higgsfield-brandkit" },
       { "source": "workflow-skills/higgsfield-faceless-video", "target": "skills/higgsfield-faceless-video" },
       { "source": "workflow-skills/higgsfield-generate", "target": "skills/higgsfield-generate" },
