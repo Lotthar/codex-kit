@@ -142,11 +142,15 @@ export async function rollbackTransaction(root, requestedId) {
   const receipt = requestedId ? receipts.find((item) => item.directoryId === requestedId) : receipts[0];
   if (!receipt || receipt.schemaVersion !== 2 || !Array.isArray(receipt.files) || receipt.id !== receipt.directoryId || !transactionIdPattern.test(receipt.directoryId)) throw new Error('Invalid Codex Kit transaction receipt.');
   const receiptDir = join(transactionsDir(root), receipt.directoryId);
+  const content = await readJson(join(root, '.codex-kit', 'content.json'), { skills: {} });
+  const contentSkills = new Set(Object.keys(content.skills ?? {}));
   const operations = [];
   for (const file of [...receipt.files].reverse()) {
     if (!file || typeof file.path !== 'string' || isAbsolute(file.path)) throw new Error('Invalid transaction target.');
     const target = join(root, file.path);
     await assertSafeTarget(root, target);
+    const targetRel = relative(resolve(root), resolve(target)).split(sep).join('/');
+    if ([...contentSkills].some((name) => targetRel === 'skills/' + name || targetRel.startsWith('skills/' + name + '/'))) throw new Error('Refusing to roll back a content-owned skill: ' + file.path);
     if (exists(target) && file.afterHash === null) throw new Error(`Refusing to overwrite user-recreated transaction target: ${file.path}`);
     if (exists(target) && file.afterHash && (await pathHash(target)) !== file.afterHash) throw new Error(`Refusing to overwrite user-modified transaction target: ${file.path}`);
     let backup = null;
@@ -154,6 +158,10 @@ export async function rollbackTransaction(root, requestedId) {
       if (typeof file.backup !== 'string' || isAbsolute(file.backup)) throw new Error('Invalid transaction backup.');
       backup = join(receiptDir, file.backup);
       await assertSafeTarget(receiptDir, backup);
+      if (targetRel === '.codex-kit/global-assets.json' && contentSkills.size) {
+        const oldGlobal = await readJson(backup);
+        if (oldGlobal.assets?.some((asset) => typeof asset.target === 'string' && asset.target.startsWith('skills/') && contentSkills.has(asset.target.slice(7)))) throw new Error('Refusing to restore legacy ownership of content skills.');
+      }
       if (!exists(backup) || (file.beforeHash && await pathHash(backup) !== file.beforeHash)) throw new Error(`Invalid transaction backup: ${file.path}`);
     }
     operations.push({ file, target, backup });

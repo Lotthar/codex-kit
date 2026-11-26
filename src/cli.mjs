@@ -1,9 +1,11 @@
 import { parseArgs } from 'node:util';
+import { contentSetup, contentStatus } from './content.mjs';
+import { contentTools } from './content-tools.mjs';
 import { join } from 'node:path';
 import { isatty } from 'node:tty';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { action, atomicWrite, print } from './util.mjs';
+import { action, atomicWrite, print, readJson } from './util.mjs';
 import { applyGlobal, applyModelRoutingPlan, checkUpdates, codexHome, globalPlan, modelRoutingPlan, modelRoutingStatus, safeExport, setAllowlistedConfig } from './global.mjs';
 import { applyProject, doctor, findProjectRoot, modifyProject, projectDiff, projectPlan, projectStatus, rollbackProject } from './project.mjs';
 import { enrich, sanitizedInventory } from './enrichment.mjs';
@@ -24,6 +26,7 @@ Usage:
   codex-kit wizard
   codex-kit setup [--preset NAME] [--model-routing] [--on-demand-skills] [--obsidian] [--memories] [--yes] [--allow-network]
   codex-kit models status|refresh [--home PATH] [--yes]
+  codex-kit content setup|status|upgrade [--source PATH] [--ref COMMIT] [--with-tools] [--home PATH] [--yes]
   codex-kit rea setup|status|remove [--home PATH] [--yes] [--allow-network] [--json]
   codex-kit brain configure --vault NAME [--home PATH] [--yes]
   codex-kit brain register [--root PATH | --external-id ID] [--project KEY] [--name NAME] [--topics CSV] [--inclusion included|excluded|pending] [--yes]
@@ -52,6 +55,7 @@ Usage:
 Mutations preview by default. --yes applies; --dry-run always previews; --json never prompts.`;
 
 const optionSpec = {
+  ref: { type: 'string' }, 'with-tools': { type: 'boolean' },
   'on-demand-skills': { type: 'boolean' }, all: { type: 'boolean' }, scope: { type: 'string' }, project: { type: 'string' }, name: { type: 'string' }, topics: { type: 'string' }, inclusion: { type: 'string' }, 'external-id': { type: 'string' }, path: { type: 'string' }, 'expected-hash': { type: 'string' }, resume: { type: 'string' },
   yes: { type: 'boolean' }, 'dry-run': { type: 'boolean' }, json: { type: 'boolean' }, help: { type: 'boolean' }, check: { type: 'boolean' }, 'include-content': { type: 'boolean' }, 'allow-network': { type: 'boolean' }, 'model-routing': { type: 'boolean' }, memories: { type: 'boolean' }, obsidian: { type: 'boolean' }, 'cross-project': { type: 'boolean' }, enrich: { type: 'boolean' }, global: { type: 'boolean' }, preset: { type: 'string' }, home: { type: 'string' }, root: { type: 'string' }, source: { type: 'string' }, output: { type: 'string' }, transaction: { type: 'string' }, value: { type: 'string' }, vault: { type: 'string' }, query: { type: 'string' }, kind: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' }, details: { type: 'string' }, supersedes: { type: 'string' }, to: { type: 'string' }
 };
@@ -136,6 +140,29 @@ export async function main(argv = process.argv.slice(2)) {
     else if (command === 'setup' || command === 'apply') {
       const plan = await globalPlan({ preset: values.preset || 'developer', home: values.home || codexHome(), allowNetwork: values['allow-network'], modelRouting: values['model-routing'], memories: values.memories, obsidian: values.obsidian, onDemandSkills: values['on-demand-skills'] });
       result = shouldApply ? await applyGlobal(plan, values['allow-network']) : plan;
+    } else if (command === 'content' && ['setup', 'upgrade', 'status'].includes(subcommand)) {
+      const home = values.home || codexHome();
+      if (subcommand === 'status') {
+        if (values['with-tools']) throw new Error('--with-tools applies only to content setup or upgrade.');
+        result = await contentStatus({ home });
+      } else {
+        const saved = subcommand === 'upgrade'
+          ? await readJson(join(home, '.codex-kit', 'content.json'), {}) : {};
+        const source = values.source || saved.source;
+        if (!source || !values.ref) throw new Error('Use: codex-kit content setup --source PATH --ref COMMIT or content upgrade --ref COMMIT [--yes]');
+        result = await contentSetup({ home, source, ref: values.ref, execute: shouldApply });
+        if (values['with-tools'] && result.status === 'ok') {
+          try {
+            const provision = await contentTools({ home, source, ref: values.ref, execute: shouldApply });
+            result = { ...result, status: provision.status === 'ok' ? 'ok' : 'failed',
+              tools: { destination: provision.destination },
+              actions: [...result.actions, ...provision.actions] };
+          } catch (error) {
+            result = { ...result, status: 'failed',
+              actions: [...result.actions, action('failed', 'install HyperFrames', error.message)] };
+          }
+        }
+      }
     } else if (command === 'rea' && ['setup', 'status', 'remove'].includes(subcommand)) {
       const options = { home: values.home || codexHome(), ...(values.home ? { userHome: values.home } : {}) };
       if (subcommand === 'status') result = await reaStatus(options);

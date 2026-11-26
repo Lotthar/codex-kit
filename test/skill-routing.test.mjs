@@ -9,8 +9,6 @@ import { catalogSkillInventory, homeSkillInventory } from '../scripts/skill-inve
 
 const entrypoints = ['humanizer', 'kit-engineering', 'kit-ui', 'kit-media'];
 const legacySkills = [
-  'higgsfield-brandkit', 'higgsfield-faceless-video', 'higgsfield-generate', 'higgsfield-marketplace-cards',
-  'higgsfield-product-photoshoot', 'higgsfield-soul-id', 'higgsfield-video-explainer', 'higgsfield-websites', 'higgsfield-youtube-thumbnail',
   'banner-design', 'brand', 'design', 'design-system', 'slides', 'ui-styling', 'ui-ux-pro-max',
   'ask-matt', 'code-review', 'codebase-design', 'diagnosing-bugs', 'domain-modeling', 'grill-me', 'grill-with-docs', 'grilling',
   'handoff', 'implement', 'implement-spec', 'improve-codebase-architecture', 'pr', 'prototype', 'research', 'retro',

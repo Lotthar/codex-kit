@@ -210,7 +210,7 @@ Codex Kit writes between `<!-- codex-kit:project:start -->` and `<!-- codex-kit:
 
 ## Global skill routing
 
-All 45 skills in the bundled upstream collections remain installed in the Codex home, so every existing `$skill-name` call remains available. The automatic core is deliberately small: `$humanizer` for requested prose rewrites plus `$kit-engineering`, `$kit-ui`, and `$kit-media` as domain entry points. The other 44 specialists—including the 16 upstream Matt Pocock workflows that were already explicit-only—are explicit-only. This preserves focused workflows without making them compete for automatic routing.
+The bundled non-Higgsfield upstream collections remain installed in the Codex home. Higgsfield specialists are installed separately from the creator-operations-skills checkout. The automatic core is deliberately small: `$humanizer` for requested prose rewrites plus `$kit-engineering`, `$kit-ui`, and `$kit-media` as domain entry points. The other specialists—including the 16 upstream Matt Pocock workflows that were already explicit-only—are explicit-only. This preserves focused workflows without making them compete for automatic routing.
 
 `$kit-engineering` supplies compact coding guidance with Ponytail and Karpathy principles; project workflow owners still control planning, approved-plan implementation, debugging, QA, refactoring, and prompt enhancement. `$kit-ui` supplies local UI/UX research and routes code changes and browser checks to the project workflows. `$kit-media` selects an appropriate native or provider-specific workflow; it never independently authorizes generation, upload, login, training, deployment, publishing, package installation, or credit use.
 
@@ -218,7 +218,7 @@ From the Kit checkout, measure the bundled catalog with `node scripts/skill-inve
 
 `$humanizer` is the reviewed [upstream Humanizer](https://github.com/blader/humanizer) revision [`b48c832f0f809c1b5658edbb838c2521b72f2413`](https://github.com/blader/humanizer/commit/b48c832f0f809c1b5658edbb838c2521b72f2413), version 4.0.0, under MIT. Its output remains a draft: review factual, technical, commercial, legal, cited, and deliberately exact wording before publishing.
 
-The provider-specific `$higgsfield-*` skills remain callable explicitly, covering generation, Soul identity training, product photoshoots, brand kits, marketplace cards, websites, faceless videos, the legacy video-explainer entry, and YouTube thumbnails. The reviewed [Higgsfield bundle](https://github.com/higgsfield-ai/skills) is pinned to [`27000402070db19d958789d05b3b52b6f4718d7c`](https://github.com/higgsfield-ai/skills/commit/27000402070db19d958789d05b3b52b6f4718d7c), version 0.14.0, under MIT. Kit neither installs its CLI nor authenticates an account, and reports a missing CLI instead of running its mutable remote bootstrap. Provider jobs and state-changing actions always require an explicit user request.
+After optional content setup, the provider-specific `$higgsfield-*` skills are callable explicitly, covering generation, Soul identity training, product photoshoots, brand kits, marketplace cards, websites, faceless videos, the legacy video-explainer entry, and YouTube thumbnails. The reviewed [Higgsfield bundle](https://github.com/higgsfield-ai/skills) is pinned to [`27000402070db19d958789d05b3b52b6f4718d7c`](https://github.com/higgsfield-ai/skills/commit/27000402070db19d958789d05b3b52b6f4718d7c), version 0.14.0, under MIT. Kit neither installs its CLI nor authenticates an account, and reports a missing CLI instead of running its mutable remote bootstrap. Provider jobs and state-changing actions always require an explicit user request.
 
 The seven UI/UX Pro Max specialists (`$ui-ux-pro-max`, `$ui-styling`, `$design`, `$design-system`, `$brand`, `$banner-design`, and `$slides`) remain explicit calls. Their offline Python-standard-library search data is pinned to [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) revision [`6ae86f61f520d6ca229d2f40e070410638c908c5`](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill/commit/6ae86f61f520d6ca229d2f40e070410638c908c5), under MIT; font-license sources and full provenance remain recorded in `workflow-skills/DESIGN-ENGINEERING-UPSTREAM.md`.
 
@@ -353,3 +353,16 @@ codex-kit wizard
 See [SECURITY.md](SECURITY.md), [CHANGELOG.md](CHANGELOG.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Primary references: [Codex AGENTS.md](https://developers.openai.com/codex/guides/agents-md), [Codex skills](https://developers.openai.com/codex/skills), [Codex subagents](https://developers.openai.com/codex/subagents), [Codex MCP](https://developers.openai.com/codex/mcp), [Obsidian CLI](https://obsidian.md/help/cli), and [Playwright best practices](https://playwright.dev/docs/best-practices).
+
+### Optional content skills
+
+The creator-operations-skills repository owns three video skills and ten explicit Higgsfield specialists. Preview and install from an exact, reviewed commit:
+
+```bash
+codex-kit content setup --source /path/to/creator-operations-skills --ref COMMIT --json
+codex-kit content setup --source /path/to/creator-operations-skills --ref COMMIT --yes
+codex-kit content status
+codex-kit content upgrade --ref NEW_COMMIT --yes
+```
+
+Kit reads the tracked tree at that commit and preserves changed or unowned skill directories. It transfers the ten receipt-owned Higgsfield directories and retains the four existing creator-operation links in their checkout. A pending transfer resumes from its recorded step. Use `--with-tools` with setup or upgrade to preview or install the pinned HyperFrames npm runtime into an isolated location; that option may access the npm registry. FFmpeg and a supported browser remain host prerequisites. The old Kit workflow-skills/higgsfield-* directories are retained for provenance and are no longer installed by global setup. New sessions are needed for reliable skill discovery.

@@ -13,6 +13,14 @@ import { modelRoutingStatePath, parseModelCatalog, resolveModelRouting, routingA
 export const codexHome = () => process.env.CODEX_HOME || join(homedir(), '.codex');
 const globalAssetsStatePath = (home) => join(home, '.codex-kit', 'global-assets.json');
 
+const retiredHiggsfieldSkills = new Set([
+  'brandkit', 'creative-director', 'faceless-video', 'generate', 'marketplace-cards',
+  'product-photoshoot', 'soul-id', 'video-explainer', 'websites', 'youtube-thumbnail'
+].map((name) => `higgsfield-${name}`));
+const retiredTarget = (target) => target.startsWith('skills/') && retiredHiggsfieldSkills.has(target.slice(7));
+const retiredAsset = (asset) => retiredTarget(asset.target) && asset.component === 'base-policy' && asset.source === `workflow-skills/${asset.target.slice(7)}`;
+
+
 function modelCatalog() {
   const result = run('codex', ['debug', 'models']);
   return result.status === 0 ? parseModelCatalog(result.stdout) : null;
@@ -71,6 +79,7 @@ export async function globalPlan({ preset = 'developer', home = codexHome(), all
   if (onDemandSkills && !components.includes('base-policy')) throw new Error('On-demand skill discovery requires base-policy routing instructions.');
   const actions = [action('planned', `manage ${join(home, 'AGENTS.md')}`, 'bounded global policy block', { scope: 'global', reversibility: 'full' })];
   const globalAssets = globalAssetsFor(components, manifest);
+  if (globalAssets.some((asset) => retiredTarget(asset.target))) throw new Error('Retired Higgsfield target cannot be managed by global setup.');
   for (const asset of globalAssets) actions.push(action('planned', `provision ${asset.target}`, asset.component, { kind: 'global-asset', scope: 'global', reversibility: 'full' }));
   for (const id of components) {
     const component = manifest.components[id];
@@ -119,6 +128,11 @@ async function applyGlobalAssets(transaction, home, desiredAssets) {
   }
   const desiredTargets = new Set(desiredAssets.map((asset) => asset.target));
   for (const previousAsset of previousAssets.values()) if (!desiredTargets.has(previousAsset.target)) {
+    if (retiredAsset(previousAsset)) {
+      installedAssets.push(previousAsset);
+      actions.push(action('unchanged', `preserve ${previousAsset.target}`, 'awaiting content ownership transfer'));
+      continue;
+    }
     const destination = join(home, previousAsset.target);
     if (!exists(destination)) continue;
     if (await pathHash(destination) !== previousAsset.hash) actions.push(action('conflict', `remove ${previousAsset.target}`, 'modified content preserved'));
@@ -214,6 +228,7 @@ export async function applyModelRoutingPlan(plan) {
 
 export async function applyGlobal(plan, allowNetwork = false, runner = run) {
   return withLock(plan.home, async () => {
+    if (exists(join(plan.home, '.codex-kit', 'content-pending'))) throw new Error('Resume pending content installation before global setup.');
     const transaction = await beginTransaction(plan.home, 'global');
     const manifest = await loadManifest();
     const runCodex = (args) => runner('codex', args, { env: { ...process.env, CODEX_HOME: plan.home } });
